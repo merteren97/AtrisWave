@@ -49,6 +49,9 @@ struct MicDspConfig {
     float reverb_wet{0.15f};
     float reverb_room{0.4f};
     float reverb_damp{0.5f};
+    uint32_t reverb_mode{0};
+    bool pitch_enabled{false};
+    float pitch_semitones{0.0f};
     bool limiter_enabled{true};
     float limiter_ceiling_db{-1.0f};
 };

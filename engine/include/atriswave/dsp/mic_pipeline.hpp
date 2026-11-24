@@ -1,11 +1,13 @@
 #pragma once
 
 #include "atriswave/dsp/compressor.hpp"
+#include "atriswave/dsp/convolution_reverb.hpp"
 #include "atriswave/dsp/denoiser.hpp"
 #include "atriswave/dsp/dsp_math.hpp"
 #include "atriswave/dsp/limiter.hpp"
 #include "atriswave/dsp/noise_gate.hpp"
 #include "atriswave/dsp/parametric_eq.hpp"
+#include "atriswave/dsp/pitch_shifter.hpp"
 #include "atriswave/dsp/reverb.hpp"
 
 #include <algorithm>
@@ -49,6 +51,10 @@ struct MicDspParams {
     float reverb_wet{0.18f};
     float reverb_room{0.45f};
     float reverb_damp{0.55f};
+    std::uint32_t reverb_mode{0}; // 0=Algorithmic, 1=StudioBooth, 2=BroadcastRoom, 3=ConcertHall
+
+    bool pitch_enabled{false};
+    float pitch_semitones{0.0f};
 
     bool limiter_enabled{true};
     float limiter_ceiling_db{-1.0f};
@@ -88,6 +94,10 @@ struct MicDspParamsAtomic {
     std::atomic<float> reverb_wet{0.18f};
     std::atomic<float> reverb_room{0.45f};
     std::atomic<float> reverb_damp{0.55f};
+    std::atomic<std::uint32_t> reverb_mode{0};
+
+    std::atomic<bool> pitch_enabled{false};
+    std::atomic<float> pitch_semitones{0.0f};
 
     std::atomic<bool> limiter_enabled{true};
     std::atomic<float> limiter_ceiling_db{-1.0f};
@@ -121,6 +131,9 @@ struct MicDspParamsAtomic {
         reverb_wet.store(p.reverb_wet, std::memory_order_relaxed);
         reverb_room.store(p.reverb_room, std::memory_order_relaxed);
         reverb_damp.store(p.reverb_damp, std::memory_order_relaxed);
+        reverb_mode.store(p.reverb_mode, std::memory_order_relaxed);
+        pitch_enabled.store(p.pitch_enabled, std::memory_order_relaxed);
+        pitch_semitones.store(p.pitch_semitones, std::memory_order_relaxed);
         limiter_enabled.store(p.limiter_enabled, std::memory_order_relaxed);
         limiter_ceiling_db.store(p.limiter_ceiling_db, std::memory_order_relaxed);
         version.fetch_add(1, std::memory_order_release);
@@ -154,6 +167,9 @@ struct MicDspParamsAtomic {
         p.reverb_wet = reverb_wet.load(std::memory_order_relaxed);
         p.reverb_room = reverb_room.load(std::memory_order_relaxed);
         p.reverb_damp = reverb_damp.load(std::memory_order_relaxed);
+        p.reverb_mode = reverb_mode.load(std::memory_order_relaxed);
+        p.pitch_enabled = pitch_enabled.load(std::memory_order_relaxed);
+        p.pitch_semitones = pitch_semitones.load(std::memory_order_relaxed);
         p.limiter_enabled = limiter_enabled.load(std::memory_order_relaxed);
         p.limiter_ceiling_db = limiter_ceiling_db.load(std::memory_order_relaxed);
         return p;
@@ -182,7 +198,9 @@ public:
         monitor_eq_.prepare(sample_rate_);
         broadcast_comp_.prepare(sample_rate_);
         monitor_comp_.prepare(sample_rate_);
+        pitch_shifter_.prepare(sample_rate_);
         reverb_.prepare(sample_rate_);
+        conv_reverb_.prepare(sample_rate_);
         limiter_.prepare(sample_rate_);
 
         env_attack_coeff_ = compute_one_pole_coeff(sample_rate_, 5.0f);
@@ -200,7 +218,9 @@ public:
         monitor_eq_.reset();
         broadcast_comp_.reset();
         monitor_comp_.reset();
+        pitch_shifter_.reset();
         reverb_.reset();
+        conv_reverb_.reset();
         limiter_.reset();
 
         peak_ = 0.0f;
@@ -281,10 +301,17 @@ public:
             if (p.comp_enabled) {
                 bc_l = broadcast_comp_.process_sample(bc_l);
             }
+            if (p.pitch_enabled && std::abs(p.pitch_semitones) > 0.05f) {
+                bc_l = pitch_shifter_.process_sample(bc_l);
+            }
 
             float bc_r = bc_l;
             if (p.reverb_enabled) {
-                reverb_.process_stereo(bc_l, bc_r);
+                if (p.reverb_mode == 0u) {
+                    reverb_.process_stereo(bc_l, bc_r);
+                } else {
+                    conv_reverb_.process_stereo(bc_l, bc_r);
+                }
             }
             if (p.limiter_enabled) {
                 limiter_.process_stereo(bc_l, bc_r);
@@ -350,7 +377,12 @@ private:
         broadcast_comp_.set_params(p.comp_threshold_db, p.comp_ratio, 6.0f, 5.0f, 80.0f, p.comp_makeup_db);
         monitor_comp_.set_params(p.comp_threshold_db, p.comp_ratio, 6.0f, 5.0f, 80.0f, p.comp_makeup_db);
 
+        pitch_shifter_.set_params(p.pitch_semitones, 1.0f);
         reverb_.set_params(p.reverb_room, p.reverb_damp, p.reverb_wet, 1.0f - p.reverb_wet * 0.5f, 10.0f);
+        if (p.reverb_mode >= 1u && p.reverb_mode <= 3u) {
+            conv_reverb_.set_preset(static_cast<IrPreset>(p.reverb_mode));
+        }
+        conv_reverb_.set_mix(p.reverb_wet, 1.0f - p.reverb_wet * 0.5f);
         limiter_.set_params(p.limiter_ceiling_db, 50.0f, 2.5f);
     }
 
@@ -368,7 +400,9 @@ private:
     ParametricEq5Band monitor_eq_{};
     DynamicsCompressor broadcast_comp_{};
     DynamicsCompressor monitor_comp_{};
+    PitchShifter pitch_shifter_{};
     StereoReverb reverb_{};
+    ConvolutionReverb conv_reverb_{};
     LookaheadLimiter limiter_{};
 
     float env_attack_coeff_{0.0f};

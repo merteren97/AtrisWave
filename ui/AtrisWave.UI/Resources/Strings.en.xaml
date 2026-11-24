@@ -14,6 +14,7 @@
     <sys:String x:Key="Tab_StudioMixer">Studio Mixer</sys:String>
     <sys:String x:Key="Tab_MicDsp">Mic DSP Studio</sys:String>
     <sys:String x:Key="Tab_AppRouting">App Routing</sys:String>
+    <sys:String x:Key="Tab_ProAutomation">Pro &amp; Automation</sys:String>
 
     <sys:String x:Key="Io_MicInput">Mic Input</sys:String>
     <sys:String x:Key="Io_MonitorOutput">Monitor Output</sys:String>
@@ -77,6 +78,29 @@
     <sys:String x:Key="Dsp_Limiter_Name">Brickwall Limiter</sys:String>
     <sys:String x:Key="Dsp_Limiter_Desc">Lookahead peak ceiling protection</sys:String>
     <sys:String x:Key="Dsp_LimiterCeiling">Ceiling (dBTP)</sys:String>
+    <sys:String x:Key="Dsp_ImportAutoEq">Import AutoEq (.txt)</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode">Reverb Mode</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Algo">Algorithmic</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Studio">Studio Booth IR</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Broadcast">Broadcast Room IR</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Concert">Concert Hall IR</sys:String>
+    <sys:String x:Key="Dsp_PitchTitle">Pitch / Voice FX</sys:String>
+    <sys:String x:Key="Dsp_PitchSemitones">Pitch Shift (semitones)</sys:String>
+
+    <sys:String x:Key="Pro_SandboxTitle">Out-of-Process Plugin Sandbox (CLAP / VST3 3.8+ MIT)</sys:String>
+    <sys:String x:Key="Pro_SandboxDesc">Isolated AtrisWavePluginHost.exe process with 5 ms automatic crash-bypass protection</sys:String>
+    <sys:String x:Key="Pro_SandboxBadge">5 ms Crash Bypass Ready</sys:String>
+    <sys:String x:Key="Pro_ScanPlugins">Scan Plugins</sys:String>
+    <sys:String x:Key="Pro_NoPlugins">No CLAP/VST3 plugins found in standard directories (click Scan Plugins to refresh).</sys:String>
+    <sys:String x:Key="Pro_HotkeysTitle">Global Win32 Hotkeys</sys:String>
+    <sys:String x:Key="Pro_HotkeysDesc">System-wide low-overhead RegisterHotKey shortcuts</sys:String>
+    <sys:String x:Key="Pro_HotkeyMicMute">Ctrl + Alt + M  →  Toggle Microphone Mute</sys:String>
+    <sys:String x:Key="Pro_HotkeySidetone">Ctrl + Alt + S  →  Toggle Direct Monitor Sidetone</sys:String>
+    <sys:String x:Key="Pro_RpcTitle">Stream Deck / Local JSON-RPC API</sys:String>
+    <sys:String x:Key="Pro_RpcDesc">Loopback-only HTTP JSON-RPC 2.0 server (127.0.0.1, no Admin required)</sys:String>
+    <sys:String x:Key="Pro_RpcEndpoint">Endpoint: http://127.0.0.1:18923/rpc</sys:String>
+    <sys:String x:Key="Pro_RpcRunning">Listening</sys:String>
+    <sys:String x:Key="Pro_RpcStopped">Stopped</sys:String>
 
     <sys:String x:Key="Routing_Title">Per-App Audio Routing &amp; Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Assign active Windows audio sessions to virtual endpoints or enable Process Loopback capture</sys:String>

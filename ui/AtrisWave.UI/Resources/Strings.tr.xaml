@@ -14,6 +14,7 @@
     <sys:String x:Key="Tab_StudioMixer">Stüdyo Mikseri</sys:String>
     <sys:String x:Key="Tab_MicDsp">Mikrofon DSP Stüdyosu</sys:String>
     <sys:String x:Key="Tab_AppRouting">Uygulama Yönlendirme</sys:String>
+    <sys:String x:Key="Tab_ProAutomation">Pro ve Otomasyon</sys:String>
 
     <sys:String x:Key="Io_MicInput">Mikrofon Girişi</sys:String>
     <sys:String x:Key="Io_MonitorOutput">Kulaklık İzleme</sys:String>
@@ -77,6 +78,29 @@
     <sys:String x:Key="Dsp_Limiter_Name">Sınırlayıcı (Brickwall Limiter)</sys:String>
     <sys:String x:Key="Dsp_Limiter_Desc">Öngörülü tepe tavan koruması</sys:String>
     <sys:String x:Key="Dsp_LimiterCeiling">Tavan (dBTP)</sys:String>
+    <sys:String x:Key="Dsp_ImportAutoEq">AutoEq İçe Aktar (.txt)</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode">Yankı Modu</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Algo">Algoritmik</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Studio">Stüdyo Kabini IR</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Broadcast">Yayın Odası IR</sys:String>
+    <sys:String x:Key="Dsp_ReverbMode_Concert">Konser Salonu IR</sys:String>
+    <sys:String x:Key="Dsp_PitchTitle">Perde / Ses Efekti (Pitch FX)</sys:String>
+    <sys:String x:Key="Dsp_PitchSemitones">Perde Kaydırma (yarım ton)</sys:String>
+
+    <sys:String x:Key="Pro_SandboxTitle">Süreç Dışı Eklenti Koruması (CLAP / VST3 3.8+ MIT)</sys:String>
+    <sys:String x:Key="Pro_SandboxDesc">5 ms otomatik çökme-atlama korumalı yalıtılmış AtrisWavePluginHost.exe süreci</sys:String>
+    <sys:String x:Key="Pro_SandboxBadge">5 ms Çökme Koruması Hazır</sys:String>
+    <sys:String x:Key="Pro_ScanPlugins">Eklentileri Tara</sys:String>
+    <sys:String x:Key="Pro_NoPlugins">Standart dizinlerde CLAP/VST3 eklentisi bulunamadı (yenilemek için Eklentileri Tara'ya tıklayın).</sys:String>
+    <sys:String x:Key="Pro_HotkeysTitle">Genel Win32 Kısayol Tuşları</sys:String>
+    <sys:String x:Key="Pro_HotkeysDesc">Sistem genelinde düşük yükle çalışan RegisterHotKey kısayolları</sys:String>
+    <sys:String x:Key="Pro_HotkeyMicMute">Ctrl + Alt + M  →  Mikrofonu Sustur / Aç</sys:String>
+    <sys:String x:Key="Pro_HotkeySidetone">Ctrl + Alt + S  →  Doğrudan Dinlemeyi (Sidetone) Aç / Kapat</sys:String>
+    <sys:String x:Key="Pro_RpcTitle">Stream Deck / Yerel JSON-RPC API</sys:String>
+    <sys:String x:Key="Pro_RpcDesc">Yalnızca geri döngü HTTP JSON-RPC 2.0 sunucusu (127.0.0.1, Yönetici gerekmez)</sys:String>
+    <sys:String x:Key="Pro_RpcEndpoint">Uç Nokta: http://127.0.0.1:18923/rpc</sys:String>
+    <sys:String x:Key="Pro_RpcRunning">Dinleniyor</sys:String>
+    <sys:String x:Key="Pro_RpcStopped">Durduruldu</sys:String>
 
     <sys:String x:Key="Routing_Title">Uygulama Bazlı Ses Yönlendirme ve Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Etkin Windows ses oturumlarını sanal uç noktalara atayın veya Süreç Loopback yakalamayı açın</sys:String>

@@ -431,7 +431,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.3.0\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"1.0.0-rc1\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -516,6 +516,9 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         if (auto v = extract_json_number(line, "reverb_wet")) cfg.reverb_wet = static_cast<float>(*v);
         if (auto v = extract_json_number(line, "reverb_room")) cfg.reverb_room = static_cast<float>(*v);
         if (auto v = extract_json_number(line, "reverb_damp")) cfg.reverb_damp = static_cast<float>(*v);
+        if (auto v = extract_json_uint(line, "reverb_mode")) cfg.reverb_mode = static_cast<uint32_t>(*v);
+        if (auto v = extract_json_bool(line, "pitch_enabled")) cfg.pitch_enabled = *v;
+        if (auto v = extract_json_number(line, "pitch_semitones")) cfg.pitch_semitones = static_cast<float>(*v);
         if (auto v = extract_json_bool(line, "limiter_enabled")) cfg.limiter_enabled = *v;
         if (auto v = extract_json_number(line, "limiter_ceiling_db")) cfg.limiter_ceiling_db = static_cast<float>(*v);
 

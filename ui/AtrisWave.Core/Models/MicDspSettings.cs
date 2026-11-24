@@ -35,9 +35,13 @@ public sealed partial class MicDspSettings : ObservableObject
     [ObservableProperty] private float _duckingDepthDb = -12.0f;
 
     [ObservableProperty] private bool _reverbEnabled = false;
+    [ObservableProperty] private int _reverbMode = 0; // 0=Algorithmic, 1=StudioBooth, 2=BroadcastRoom, 3=ConcertHall
     [ObservableProperty] private float _reverbWet = 0.15f;
     [ObservableProperty] private float _reverbRoom = 0.45f;
     [ObservableProperty] private float _reverbDamp = 0.50f;
+
+    [ObservableProperty] private bool _pitchEnabled = false;
+    [ObservableProperty] private float _pitchSemitones = 0.0f;
 
     [ObservableProperty] private bool _limiterEnabled = true;
     [ObservableProperty] private float _limiterCeilingDb = -0.5f;
@@ -65,9 +69,12 @@ public sealed partial class MicDspSettings : ObservableObject
         DuckingEnabled = DuckingEnabled,
         DuckingDepthDb = DuckingDepthDb,
         ReverbEnabled = ReverbEnabled,
+        ReverbMode = ReverbMode,
         ReverbWet = ReverbWet,
         ReverbRoom = ReverbRoom,
         ReverbDamp = ReverbDamp,
+        PitchEnabled = PitchEnabled,
+        PitchSemitones = PitchSemitones,
         LimiterEnabled = LimiterEnabled,
         LimiterCeilingDb = LimiterCeilingDb,
     };
@@ -105,9 +112,13 @@ public sealed class MicDspWireDto
     [JsonPropertyName("ducking_depth_db")] public float DuckingDepthDb { get; set; }
 
     [JsonPropertyName("reverb_enabled")] public bool ReverbEnabled { get; set; }
+    [JsonPropertyName("reverb_mode")] public int ReverbMode { get; set; }
     [JsonPropertyName("reverb_wet")] public float ReverbWet { get; set; }
     [JsonPropertyName("reverb_room")] public float ReverbRoom { get; set; }
     [JsonPropertyName("reverb_damp")] public float ReverbDamp { get; set; }
+
+    [JsonPropertyName("pitch_enabled")] public bool PitchEnabled { get; set; }
+    [JsonPropertyName("pitch_semitones")] public float PitchSemitones { get; set; }
 
     [JsonPropertyName("limiter_enabled")] public bool LimiterEnabled { get; set; }
     [JsonPropertyName("limiter_ceiling_db")] public float LimiterCeilingDb { get; set; }

@@ -37,6 +37,32 @@ jobs:
       - name: Run Engine Tests (CTest)
         run: ctest --preset msvc-release --output-on-failure
 
+  build-plugin-host:
+    name: Build & Test C++20 Plugin Host
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: plugin-host
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure CMake (msvc-release)
+        run: cmake --preset msvc-release
+
+      - name: Build Plugin Host (Release)
+        run: cmake --build --preset msvc-release
+
+      - name: Run Plugin Host Tests (CTest)
+        run: ctest --preset msvc-release --output-on-failure
+
   build-ui:
     name: Build & Test .NET 10 WPF UI
     runs-on: windows-latest

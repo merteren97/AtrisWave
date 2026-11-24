@@ -1,11 +1,18 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
+using System.Text.Json;
+using System.Windows;
 using System.Windows.Threading;
+using AtrisWave.Core.Automation;
+using AtrisWave.Core.Dsp;
 using AtrisWave.Core.Ipc;
 using AtrisWave.Core.Models;
+using AtrisWave.Core.Plugins;
 using AtrisWave.UI.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
 
 namespace AtrisWave.UI.ViewModels;
 
@@ -14,6 +21,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly SharedMemoryTelemetryReader _telemetryReader = new();
     private readonly EnginePipeClient _pipeClient = new();
     private readonly EngineProcessManager _processManager = new();
+    private readonly LocalAutomationServer _rpcServer;
     private readonly ChannelMeterFrame[] _channelBuffer = new ChannelMeterFrame[TelemetryConstants.MaxChannels];
     private readonly DispatcherTimer _telemetryTimer;
     private readonly DispatcherTimer _micDspDebounceTimer;
@@ -36,6 +44,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<AudioDeviceInfo> OutputDevices { get; } = [];
     public ObservableCollection<AudioSessionInfo> AudioSessions { get; } = [];
     public ObservableCollection<RoutingRule> RoutingRules { get; } = [];
+    public ObservableCollection<DiscoveredPlugin> DiscoveredPlugins { get; } = [];
     public ObservableCollection<string> Presets { get; } = ["Broadcast Warm", "Podcast Crisp", "Gaming Clean"];
 
     [ObservableProperty] private AudioDeviceInfo? _selectedInputDevice;
@@ -57,9 +66,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _lastPingMessage = string.Empty;
     [ObservableProperty] private string _engineActionKey = "Io_LaunchEngine";
     [ObservableProperty] private float _micGainReductionNormalized;
+    [ObservableProperty] private bool _globalHotkeysEnabled = true;
+    [ObservableProperty] private bool _rpcServerEnabled;
+    [ObservableProperty] private string _rpcStatusKey = "Pro_RpcStopped";
+
+    public event EventHandler<bool>? GlobalHotkeysEnabledChanged;
 
     public MainViewModel()
     {
+        _rpcServer = new LocalAutomationServer(HandleRpcAsync, port: 18923);
         LocalizationService.Instance.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(LocalizationService.Revision))
@@ -95,6 +110,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSelectedInputDeviceChanged(AudioDeviceInfo? value) => _ = PushDeviceSelectionAsync();
     partial void OnSelectedMonitorDeviceChanged(AudioDeviceInfo? value) => _ = PushDeviceSelectionAsync();
     partial void OnSelectedVirtualOutputDeviceChanged(AudioDeviceInfo? value) => _ = PushDeviceSelectionAsync();
+    partial void OnGlobalHotkeysEnabledChanged(bool value) => GlobalHotkeysEnabledChanged?.Invoke(this, value);
+    partial void OnRpcServerEnabledChanged(bool value)
+    {
+        if (value)
+        {
+            _rpcServer.Start();
+            RpcStatusKey = "Pro_RpcRunning";
+        }
+        else
+        {
+            _ = _rpcServer.StopAsync();
+            RpcStatusKey = "Pro_RpcStopped";
+        }
+    }
 
     private void OnChannelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -225,6 +254,94 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (mic is not null)
         {
             mic.IsMuted = !mic.IsMuted;
+        }
+    }
+
+    public void ToggleDirectMonitor()
+        => MicDsp.DirectMonitor = !MicDsp.DirectMonitor;
+
+    [RelayCommand]
+    private void ImportAutoEq()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "AutoEq Parametric EQ (*.txt)|*.txt|All Files (*.*)|*.*",
+        };
+
+        if (dialog.ShowDialog() == true && File.Exists(dialog.FileName))
+        {
+            string content = File.ReadAllText(dialog.FileName);
+            AutoEqProfile profile = AutoEqParser.Parse(content);
+            AutoEqParser.ApplyTo(profile, MicDsp);
+        }
+    }
+
+    [RelayCommand]
+    private void ScanPlugins()
+    {
+        DiscoveredPlugins.Clear();
+        foreach (DiscoveredPlugin plugin in PluginScanner.ScanStandardDirectories())
+        {
+            DiscoveredPlugins.Add(plugin);
+        }
+    }
+
+    private async Task<object?> HandleRpcAsync(string method, JsonElement? parameters)
+    {
+        switch (method)
+        {
+            case "get_status":
+                return new
+                {
+                    connected = IsEngineConnected,
+                    sample_rate = SampleRate,
+                    buffer_frames = BufferFrames,
+                    mic_muted = Channels[(int)MixerChannelId.Microphone].IsMuted,
+                };
+            case "toggle_mic_mute":
+                await Application.Current.Dispatcher.InvokeAsync(ToggleMicMute);
+                return new { mic_muted = Channels[(int)MixerChannelId.Microphone].IsMuted };
+            case "set_channel_volume":
+                if (parameters is JsonElement pVol &&
+                    pVol.TryGetProperty("channel_id", out JsonElement chEl) &&
+                    pVol.TryGetProperty("volume", out JsonElement volEl))
+                {
+                    int idx = chEl.GetInt32();
+                    float vol = volEl.GetSingle();
+                    if (idx >= 0 && idx < Channels.Count)
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(() => Channels[idx].Volume = Math.Clamp(vol, 0f, 1.25f));
+                        return new { ok = true };
+                    }
+                }
+                return new { ok = false };
+            case "set_channel_mute":
+                if (parameters is JsonElement pMute &&
+                    pMute.TryGetProperty("channel_id", out JsonElement chM) &&
+                    pMute.TryGetProperty("muted", out JsonElement mEl))
+                {
+                    int idx = chM.GetInt32();
+                    bool muted = mEl.GetBoolean();
+                    if (idx >= 0 && idx < Channels.Count)
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(() => Channels[idx].IsMuted = muted);
+                        return new { ok = true };
+                    }
+                }
+                return new { ok = false };
+            case "load_preset":
+                if (parameters is JsonElement pPreset && pPreset.TryGetProperty("name", out JsonElement nameEl))
+                {
+                    string? presetName = nameEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(presetName))
+                    {
+                        EnginePipeResponse resp = await _pipeClient.LoadPresetAsync(presetName);
+                        return new { ok = resp.Ok };
+                    }
+                }
+                return new { ok = false };
+            default:
+                return new RpcMethodNotFound();
         }
     }
 
@@ -459,5 +576,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _telemetryReader.Dispose();
         _pipeClient.Dispose();
         _processManager.Dispose();
+        _rpcServer.Dispose();
     }
 }

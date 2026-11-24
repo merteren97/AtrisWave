@@ -47,6 +47,9 @@ dsp::MicDspParams to_dsp_params(const MicDspConfig& cfg) noexcept {
     p.reverb_wet = cfg.reverb_wet;
     p.reverb_room = cfg.reverb_room;
     p.reverb_damp = cfg.reverb_damp;
+    p.reverb_mode = cfg.reverb_mode;
+    p.pitch_enabled = cfg.pitch_enabled;
+    p.pitch_semitones = cfg.pitch_semitones;
     p.limiter_enabled = cfg.limiter_enabled;
     p.limiter_ceiling_db = cfg.limiter_ceiling_db;
     return p;
@@ -63,6 +66,7 @@ std::string serialize_mic_cfg_json(const MicDspConfig& c) {
         "\"eq_mid2_db\":%.4f,\"eq_high_db\":%.4f,\"comp_enabled\":%s,\"comp_threshold_db\":%.4f,"
         "\"comp_ratio\":%.4f,\"comp_makeup_db\":%.4f,\"ducking_enabled\":%s,\"ducking_depth_db\":%.4f,"
         "\"reverb_enabled\":%s,\"reverb_wet\":%.4f,\"reverb_room\":%.4f,\"reverb_damp\":%.4f,"
+        "\"reverb_mode\":%u,\"pitch_enabled\":%s,\"pitch_semitones\":%.4f,"
         "\"limiter_enabled\":%s,\"limiter_ceiling_db\":%.4f}",
         c.direct_monitor ? "true" : "false", c.monitor_gain,
         c.denoise_enabled ? "true" : "false", c.denoise_strength,
@@ -72,6 +76,7 @@ std::string serialize_mic_cfg_json(const MicDspConfig& c) {
         c.comp_enabled ? "true" : "false", c.comp_threshold_db, c.comp_ratio, c.comp_makeup_db,
         c.ducking_enabled ? "true" : "false", c.ducking_depth_db,
         c.reverb_enabled ? "true" : "false", c.reverb_wet, c.reverb_room, c.reverb_damp,
+        c.reverb_mode, c.pitch_enabled ? "true" : "false", c.pitch_semitones,
         c.limiter_enabled ? "true" : "false", c.limiter_ceiling_db);
     return std::string(buf);
 }
@@ -130,6 +135,9 @@ MicDspConfig parse_mic_cfg_json(std::string_view json) {
     if (auto v = find_number(json, "reverb_wet")) c.reverb_wet = static_cast<float>(*v);
     if (auto v = find_number(json, "reverb_room")) c.reverb_room = static_cast<float>(*v);
     if (auto v = find_number(json, "reverb_damp")) c.reverb_damp = static_cast<float>(*v);
+    if (auto v = find_number(json, "reverb_mode")) c.reverb_mode = static_cast<uint32_t>(*v);
+    if (auto v = find_bool(json, "pitch_enabled")) c.pitch_enabled = *v;
+    if (auto v = find_number(json, "pitch_semitones")) c.pitch_semitones = static_cast<float>(*v);
     if (auto v = find_bool(json, "limiter_enabled")) c.limiter_enabled = *v;
     if (auto v = find_number(json, "limiter_ceiling_db")) c.limiter_ceiling_db = static_cast<float>(*v);
     return c;

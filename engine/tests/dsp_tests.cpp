@@ -1,4 +1,5 @@
 #include "atriswave/dsp/compressor.hpp"
+#include "atriswave/dsp/convolution_reverb.hpp"
 #include "atriswave/dsp/denoiser.hpp"
 #include "atriswave/dsp/dsp_math.hpp"
 #include "atriswave/dsp/limiter.hpp"
@@ -6,6 +7,7 @@
 #include "atriswave/dsp/mixer_bus.hpp"
 #include "atriswave/dsp/noise_gate.hpp"
 #include "atriswave/dsp/parametric_eq.hpp"
+#include "atriswave/dsp/pitch_shifter.hpp"
 #include "atriswave/dsp/pll_resampler.hpp"
 #include "atriswave/dsp/reverb.hpp"
 
@@ -357,6 +359,91 @@ void test_mic_pipeline_and_mixer_bus() {
     ATRIS_CHECK((frames[5].flags & ATRISWAVE_CHANNEL_FLAG_MUTED) != 0u);
 }
 
+void test_convolution_reverb() {
+    using namespace atriswave::dsp;
+    constexpr double kSr = 48000.0;
+    constexpr std::size_t kFrames = 16384;
+
+    for (IrPreset preset : {IrPreset::StudioBooth, IrPreset::BroadcastRoom, IrPreset::ConcertHall}) {
+        ConvolutionReverb conv;
+        conv.prepare(kSr);
+        conv.set_preset(preset);
+        conv.set_mix(1.0f, 0.0f);
+
+        std::vector<float> left(kFrames, 0.0f);
+        std::vector<float> right(kFrames, 0.0f);
+        left[0] = 1.0f;
+        right[0] = 1.0f;
+
+        conv.process_block(left.data(), right.data(), kFrames);
+
+        bool all_finite = true;
+        for (std::size_t i = 0; i < kFrames; ++i) {
+            if (!std::isfinite(left[i]) || !std::isfinite(right[i])) {
+                all_finite = false;
+                break;
+            }
+        }
+        ATRIS_CHECK(all_finite);
+
+        const float tail_rms = compute_rms(std::vector<float>(left.begin() + 512, left.begin() + 3000));
+        const float late_rms = compute_rms(std::vector<float>(left.begin() + 10000, left.begin() + kFrames));
+        ATRIS_CHECK(tail_rms > 1e-4f);
+        ATRIS_CHECK(late_rms < tail_rms * 0.5f);
+    }
+}
+
+void test_pitch_shifter() {
+    using namespace atriswave::dsp;
+    constexpr double kSr = 48000.0;
+    constexpr std::size_t kFrames = 16384;
+
+    PitchShifter shifter;
+    shifter.prepare(kSr);
+
+    // 0 semitones = unity passthrough
+    shifter.set_params(0.0f, 1.0f);
+    auto unity = make_sine(2048, 440.0, kSr, 0.5f);
+    const auto orig = unity;
+    shifter.process_block(unity.data(), unity.size());
+    for (std::size_t i = 0; i < unity.size(); ++i) {
+        ATRIS_CHECK(std::abs(unity[i] - orig[i]) < 1e-5f);
+    }
+
+    auto count_zero_crossings = [](const std::vector<float>& buf, std::size_t start) {
+        std::size_t zc = 0;
+        for (std::size_t i = start + 1; i < buf.size(); ++i) {
+            if (buf[i - 1] <= 0.0f && buf[i] > 0.0f) {
+                ++zc;
+            }
+        }
+        return zc;
+    };
+
+    // +12 st shifts 440 Hz upward (~2x zero-crossings)
+    shifter.reset();
+    shifter.set_params(12.0f, 1.0f);
+    auto up_sig = make_sine(kFrames, 440.0, kSr, 0.6f);
+    const std::size_t base_zc = count_zero_crossings(up_sig, 4096);
+    shifter.process_block(up_sig.data(), up_sig.size());
+    const std::size_t up_zc = count_zero_crossings(up_sig, 4096);
+    float up_peak = 0.0f;
+    for (float s : up_sig) {
+        ATRIS_CHECK(std::isfinite(s));
+        up_peak = std::max(up_peak, std::abs(s));
+    }
+    ATRIS_CHECK(up_peak <= 0.8f);
+    ATRIS_CHECK(up_zc > base_zc * 1.7);
+
+    // -12 st shifts 440 Hz downward (~0.5x zero-crossings)
+    shifter.reset();
+    shifter.set_params(-12.0f, 1.0f);
+    auto down_sig = make_sine(kFrames, 440.0, kSr, 0.6f);
+    shifter.process_block(down_sig.data(), down_sig.size());
+    const std::size_t down_zc = count_zero_crossings(down_sig, 4096);
+    ATRIS_CHECK(down_zc < static_cast<std::size_t>(base_zc * 0.65));
+}
+
 } // namespace
 
 int main() {
@@ -369,6 +456,8 @@ int main() {
     test_spectral_denoiser();
     test_pll_resampler();
     test_mic_pipeline_and_mixer_bus();
+    test_convolution_reverb();
+    test_pitch_shifter();
 
     if (g_failures == 0) {
         std::printf("ALL DSP TESTS PASSED\n");

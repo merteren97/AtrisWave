@@ -8,6 +8,7 @@ namespace AtrisWave.UI;
 public partial class MainWindow : FluentWindow
 {
     private readonly MainViewModel _viewModel;
+    private readonly Services.GlobalHotkeyService _hotkeyService = new();
     private Point _dragStartPoint;
 
     public MainWindow(MainViewModel viewModel)
@@ -17,7 +18,21 @@ public partial class MainWindow : FluentWindow
         InitializeComponent();
         StateChanged += OnWindowStateChanged;
         IsVisibleChanged += OnWindowVisibilityChanged;
+        Loaded += OnMainWindowLoaded;
+        Closed += OnMainWindowClosed;
     }
+
+    private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        _hotkeyService.Attach(this);
+        _hotkeyService.ToggleMicMuteRequested += (_, _) => _viewModel.ToggleMicMuteCommand.Execute(null);
+        _hotkeyService.ToggleDirectMonitorRequested += (_, _) => _viewModel.ToggleDirectMonitor();
+        _hotkeyService.SetEnabled(_viewModel.GlobalHotkeysEnabled);
+        _viewModel.GlobalHotkeysEnabledChanged += (_, enabled) => _hotkeyService.SetEnabled(enabled);
+    }
+
+    private void OnMainWindowClosed(object? sender, EventArgs e)
+        => _hotkeyService.Dispose();
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {
