@@ -85,6 +85,7 @@ void enumerate_flow(IMMDeviceEnumerator* enumerator,
         }
 
         info.is_virtual = WasapiDeviceEnumerator::is_virtual_device_name(info.name);
+        info.virtual_pair_group = WasapiDeviceEnumerator::detect_virtual_pair_group(info.name);
 
         ComPtr<IAudioClient> audio_client;
         if (SUCCEEDED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, audio_client.put_void())) &&
@@ -107,10 +108,41 @@ bool WasapiDeviceEnumerator::is_virtual_device_name(std::string_view name) noexc
     const std::string lower = to_lower_ascii(name);
     return lower.find("cable input") != std::string::npos ||
            lower.find("cable output") != std::string::npos ||
+           lower.find("cable-a") != std::string::npos ||
+           lower.find("cable-b") != std::string::npos ||
            lower.find("vb-audio") != std::string::npos ||
            lower.find("virtual audio") != std::string::npos ||
            lower.find("atriswave") != std::string::npos ||
            lower.find("voicemeeter") != std::string::npos;
+}
+
+std::string WasapiDeviceEnumerator::detect_virtual_pair_group(std::string_view name) {
+    const std::string lower = to_lower_ascii(name);
+    if (lower.find("cable-a") != std::string::npos) {
+        return "vb-cable-a";
+    }
+    if (lower.find("cable-b") != std::string::npos) {
+        return "vb-cable-b";
+    }
+    if (lower.find("cable input") != std::string::npos ||
+        lower.find("cable output") != std::string::npos ||
+        lower.find("vb-audio virtual cable") != std::string::npos) {
+        return "vb-cable-0";
+    }
+    if (lower.find("atriswave") != std::string::npos) {
+        if (lower.find("system") != std::string::npos) return "atriswave-vad-0";
+        if (lower.find("mic") != std::string::npos) return "atriswave-vad-1";
+        if (lower.find("stream") != std::string::npos) return "atriswave-vad-2";
+        const size_t ch_pos = lower.find("ch ");
+        if (ch_pos != std::string::npos && (ch_pos + 3) < lower.size()) {
+            const int ch_num = std::atoi(lower.c_str() + ch_pos + 3);
+            if (ch_num >= 1 && ch_num <= 16) {
+                return "atriswave-vad-" + std::to_string(ch_num - 1);
+            }
+        }
+        return "atriswave-vad-0";
+    }
+    return {};
 }
 
 std::vector<AudioDeviceInfo> WasapiDeviceEnumerator::enumerate_devices() {

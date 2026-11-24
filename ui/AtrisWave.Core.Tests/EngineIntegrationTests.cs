@@ -58,7 +58,7 @@ public sealed class EngineIntegrationTests
             JsonElement statusRoot = statusResp.Payload.Value;
             JsonElement statusResult = statusRoot.TryGetProperty("result", out JsonElement innerStatus) ? innerStatus : statusRoot;
             Assert.Equal(48000u, statusResult.GetProperty("sample_rate").GetUInt32());
-            Assert.Equal(6u, statusResult.GetProperty("channel_count").GetUInt32());
+            Assert.True(statusResult.GetProperty("channel_count").GetUInt32() >= 2u);
 
             // 3. ListDevicesAsync
             IReadOnlyList<AudioDeviceInfo> devices = await pipe.ListDevicesAsync();
@@ -92,7 +92,7 @@ public sealed class EngineIntegrationTests
 
             // 5c. Phase 2 Driver Status & Persistent Routing Rules roundtrip
             DriverStatusInfo driverStatus = await pipe.GetDriverStatusAsync();
-            Assert.Equal(6u, driverStatus.EndpointCount);
+            Assert.Equal(16u, driverStatus.EndpointCount);
             Assert.False(string.IsNullOrWhiteSpace(driverStatus.FallbackMode));
 
             var testRule = new RoutingRule
@@ -111,7 +111,7 @@ public sealed class EngineIntegrationTests
             EnginePipeResponse delRuleResp = await pipe.DeleteRoutingRuleAsync(testRuleProcess);
             Assert.True(delRuleResp.Ok, $"DeleteRoutingRuleAsync failed: {delRuleResp.Error}");
 
-            // 6. SharedMemoryTelemetryReader: verify snapshot & advancing seqlock sequence
+            // 6. SharedMemoryTelemetryReader V2: verify 704B snapshot & advancing seqlock sequence
             using var shm = new SharedMemoryTelemetryReader(TelemetryConstants.SharedMemoryName);
             TelemetrySnapshot? snap1 = null;
             for (int i = 0; i < 20; i++)
@@ -126,9 +126,33 @@ public sealed class EngineIntegrationTests
 
             Assert.NotNull(snap1);
             Assert.Equal(TelemetryConstants.Magic, snap1.Header.Magic);
-            Assert.Equal(TelemetryConstants.ProtocolVersion, snap1.Header.Version);
-            Assert.Equal(6u, snap1.Header.ChannelCount);
+            Assert.Equal(2u, snap1.Header.Version);
+            Assert.True(snap1.Header.ChannelCount >= 2u);
+            Assert.Equal(4u, snap1.Header.BusCount);
             Assert.Equal(48000u, snap1.Header.SampleRate);
+
+            // 6b. v2 Dynamic Channels & Output Buses roundtrip
+            IReadOnlyList<DynamicChannelModel> channels = await pipe.ListChannelsAsync();
+            Assert.NotEmpty(channels);
+
+            IReadOnlyList<OutputBusModel> buses = await pipe.ListOutputBusesAsync();
+            Assert.Equal(4, buses.Count);
+
+            (bool createdOk, uint createdId) = await pipe.CreateChannelAsync("Discord", "app_group", "#5865F2");
+            Assert.True(createdOk);
+            Assert.True(createdId > 0);
+
+            EnginePipeResponse bindAppResp = await pipe.BindAppToChannelAsync("Discord.exe", createdId);
+            Assert.True(bindAppResp.Ok, $"BindAppToChannelAsync failed: {bindAppResp.Error}");
+
+            EnginePipeResponse sendResp = await pipe.SetChannelSendAsync(createdId, "A1", true, 1.0f);
+            Assert.True(sendResp.Ok, $"SetChannelSendAsync failed: {sendResp.Error}");
+
+            EnginePipeResponse renameResp = await pipe.RenameChannelAsync(createdId, "VoiceChat");
+            Assert.True(renameResp.Ok, $"RenameChannelAsync failed: {renameResp.Error}");
+
+            EnginePipeResponse delChResp = await pipe.DeleteChannelAsync(createdId);
+            Assert.True(delChResp.Ok, $"DeleteChannelAsync failed: {delChResp.Error}");
 
             TelemetrySnapshot? snap2 = null;
             for (int i = 0; i < 30; i++)

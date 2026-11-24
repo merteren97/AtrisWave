@@ -100,6 +100,31 @@ public:
         return 0;
     }
 
+    std::vector<DynamicChannelInfo> list_channels() override { return {}; }
+    V2CommandResult create_channel(const std::string&, const std::string&, const std::string&) override {
+        return {false, "unsupported", 0};
+    }
+    V2CommandResult delete_channel(uint32_t) override { return {false, "unsupported", 0}; }
+    V2CommandResult rename_channel(uint32_t, const std::string&) override { return {false, "unsupported", 0}; }
+    V2CommandResult bind_channel_source(uint32_t, const std::string&, const std::string&) override {
+        return {false, "unsupported", 0};
+    }
+    std::vector<OutputBusInfo> list_output_buses() override { return {}; }
+    V2CommandResult bind_output_bus(const std::string&, const std::string&, float, bool) override {
+        return {false, "unsupported", 0};
+    }
+    V2CommandResult set_channel_send(uint32_t, const std::string&, bool, float) override {
+        return {false, "unsupported", 0};
+    }
+    V2CommandResult set_channel_dsp(const ChannelDspConfig&) override { return {false, "unsupported", 0}; }
+    V2CommandResult bind_app_to_channel(const std::string&, uint32_t) override {
+        return {false, "unsupported", 0};
+    }
+    V2CommandResult unbind_app_from_channel(const std::string&, uint32_t) override {
+        return {false, "unsupported", 0};
+    }
+    V2CommandResult auto_setup_defaults() override { return {false, "unsupported", 0}; }
+
 private:
     ControlServer::StatusProvider status_provider_;
     ControlServer::ShutdownCallback on_shutdown_;
@@ -431,7 +456,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"1.0.0-rc1\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.0.0-alpha\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -634,6 +659,212 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
     if (*cmd == "apply_routing_rules") {
         const uint32_t count = handler_->apply_routing_rules();
         return make_ok_response(id, "{\"applied_count\":" + std::to_string(count) + "}");
+    }
+
+    if (*cmd == "list_channels") {
+        const auto channels = handler_->list_channels();
+        std::string json = "{\"channels\":[";
+        for (size_t i = 0; i < channels.size(); ++i) {
+            if (i > 0) json.push_back(',');
+            const auto& c = channels[i];
+            char num_buf[256]{};
+            std::snprintf(
+                num_buf,
+                sizeof(num_buf),
+                ",\"is_system\":%s,\"volume\":%.4f,\"muted\":%s,\"solo\":%s,\"pan\":%.4f,"
+                "\"send_a1\":%s,\"send_a2\":%s,\"send_b1\":%s,\"send_b2\":%s,\"echo_locked_a1_a2\":%s",
+                c.is_system ? "true" : "false",
+                c.volume,
+                c.muted ? "true" : "false",
+                c.solo ? "true" : "false",
+                c.pan,
+                c.send_a1 ? "true" : "false",
+                c.send_a2 ? "true" : "false",
+                c.send_b1 ? "true" : "false",
+                c.send_b2 ? "true" : "false",
+                c.echo_locked_a1_a2 ? "true" : "false");
+
+            json += "{\"channel_id\":" + std::to_string(c.channel_id) +
+                    ",\"name\":\"" + audio::json_escape(c.name) +
+                    "\",\"source_type\":\"" + audio::json_escape(c.source_type) +
+                    "\",\"device_id\":\"" + audio::json_escape(c.device_id) +
+                    "\",\"color\":\"" + audio::json_escape(c.color) + "\"" +
+                    num_buf + ",\"bound_apps\":[";
+            for (size_t a = 0; a < c.bound_apps.size(); ++a) {
+                if (a > 0) json.push_back(',');
+                json += "\"" + audio::json_escape(c.bound_apps[a]) + "\"";
+            }
+            json += "]}";
+        }
+        json += "]}";
+        return make_ok_response(id, json);
+    }
+
+    if (*cmd == "create_channel") {
+        const std::string name = extract_json_string(line, "name").value_or("");
+        const std::string source_type = extract_json_string(line, "source_type").value_or("app_group");
+        const std::string color = extract_json_string(line, "color").value_or("#6366F1");
+        const auto res = handler_->create_channel(name, source_type, color);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "create_channel_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"created\":true,\"channel_id\":" + std::to_string(res.channel_id) + "}");
+    }
+
+    if (*cmd == "delete_channel") {
+        const auto ch_id = extract_json_uint(line, "channel_id");
+        if (!ch_id.has_value()) {
+            return make_err_response(id, "missing_channel_id");
+        }
+        const auto res = handler_->delete_channel(static_cast<uint32_t>(*ch_id));
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "delete_channel_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"deleted\":true}");
+    }
+
+    if (*cmd == "rename_channel") {
+        const auto ch_id = extract_json_uint(line, "channel_id");
+        const auto name = extract_json_string(line, "name");
+        if (!ch_id.has_value() || !name.has_value()) {
+            return make_err_response(id, "invalid_params");
+        }
+        const auto res = handler_->rename_channel(static_cast<uint32_t>(*ch_id), *name);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "rename_channel_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"renamed\":true}");
+    }
+
+    if (*cmd == "bind_channel_source") {
+        const auto ch_id = extract_json_uint(line, "channel_id");
+        if (!ch_id.has_value()) {
+            return make_err_response(id, "missing_channel_id");
+        }
+        const std::string source_type = extract_json_string(line, "source_type").value_or("app_group");
+        const std::string device_id = extract_json_string(line, "device_id").value_or("");
+        const auto res = handler_->bind_channel_source(static_cast<uint32_t>(*ch_id), source_type, device_id);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "bind_channel_source_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"bound\":true}");
+    }
+
+    if (*cmd == "list_output_buses") {
+        const auto buses = handler_->list_output_buses();
+        std::string json = "{\"buses\":[";
+        for (size_t i = 0; i < buses.size(); ++i) {
+            if (i > 0) json.push_back(',');
+            const auto& b = buses[i];
+            char buf[128]{};
+            std::snprintf(
+                buf,
+                sizeof(buf),
+                ",\"is_virtual\":%s,\"volume\":%.4f,\"muted\":%s,\"active\":%s}",
+                b.is_virtual ? "true" : "false",
+                b.volume,
+                b.muted ? "true" : "false",
+                b.active ? "true" : "false");
+            json += "{\"bus_id\":\"" + audio::json_escape(b.bus_id) +
+                    "\",\"role\":\"" + audio::json_escape(b.role) +
+                    "\",\"name\":\"" + audio::json_escape(b.name) +
+                    "\",\"device_id\":\"" + audio::json_escape(b.device_id) +
+                    "\",\"device_name\":\"" + audio::json_escape(b.device_name) + "\"" + buf;
+        }
+        json += "]}";
+        return make_ok_response(id, json);
+    }
+
+    if (*cmd == "bind_output_bus") {
+        const auto bus_id = extract_json_string(line, "bus_id");
+        if (!bus_id.has_value()) {
+            return make_err_response(id, "missing_bus_id");
+        }
+        const std::string device_id = extract_json_string(line, "device_id").value_or("");
+        const float vol = static_cast<float>(extract_json_number(line, "volume").value_or(1.0));
+        const bool muted = extract_json_bool(line, "muted").value_or(false);
+        const auto res = handler_->bind_output_bus(*bus_id, device_id, vol, muted);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "bind_output_bus_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"bound\":true}");
+    }
+
+    if (*cmd == "set_channel_send") {
+        const auto ch_id = extract_json_uint(line, "channel_id");
+        const auto bus_id = extract_json_string(line, "bus_id");
+        if (!ch_id.has_value() || !bus_id.has_value()) {
+            return make_err_response(id, "invalid_params");
+        }
+        const bool enabled = extract_json_bool(line, "enabled").value_or(false);
+        const float send_gain = static_cast<float>(extract_json_number(line, "send_gain").value_or(1.0));
+        const auto res = handler_->set_channel_send(static_cast<uint32_t>(*ch_id), *bus_id, enabled, send_gain);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "set_channel_send_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"updated\":true}");
+    }
+
+    if (*cmd == "set_channel_dsp") {
+        ChannelDspConfig cfg{};
+        cfg.channel_id = static_cast<uint32_t>(extract_json_uint(line, "channel_id").value_or(0));
+        if (auto v = extract_json_number(line, "volume")) cfg.volume = static_cast<float>(*v);
+        if (auto v = extract_json_bool(line, "muted")) cfg.muted = *v;
+        if (auto v = extract_json_bool(line, "solo")) cfg.solo = *v;
+        if (auto v = extract_json_number(line, "pan")) cfg.pan = static_cast<float>(*v);
+        if (auto v = extract_json_bool(line, "eq_enabled")) cfg.eq_enabled = *v;
+        if (auto v = extract_json_number(line, "eq_hpf_hz")) cfg.eq_hpf_hz = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "eq_low_db")) cfg.eq_low_db = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "eq_mid1_hz")) cfg.eq_mid1_hz = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "eq_mid1_db")) cfg.eq_mid1_db = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "eq_mid2_hz")) cfg.eq_mid2_hz = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "eq_mid2_db")) cfg.eq_mid2_db = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "eq_high_db")) cfg.eq_high_db = static_cast<float>(*v);
+        if (auto v = extract_json_bool(line, "comp_enabled")) cfg.comp_enabled = *v;
+        if (auto v = extract_json_number(line, "comp_threshold_db")) cfg.comp_threshold_db = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "comp_ratio")) cfg.comp_ratio = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "comp_makeup_db")) cfg.comp_makeup_db = static_cast<float>(*v);
+        if (auto v = extract_json_number(line, "duck_source_id")) cfg.duck_source_id = static_cast<int32_t>(*v);
+        if (auto v = extract_json_number(line, "duck_depth_db")) cfg.duck_depth_db = static_cast<float>(*v);
+        const auto res = handler_->set_channel_dsp(cfg);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "set_channel_dsp_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"updated\":true}");
+    }
+
+    if (*cmd == "bind_app_to_channel") {
+        const auto proc = extract_json_string(line, "process_name");
+        const auto ch_id = extract_json_uint(line, "channel_id");
+        if (!proc.has_value() || !ch_id.has_value()) {
+            return make_err_response(id, "invalid_params");
+        }
+        const auto res = handler_->bind_app_to_channel(*proc, static_cast<uint32_t>(*ch_id));
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "bind_app_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"bound\":true}");
+    }
+
+    if (*cmd == "unbind_app_from_channel") {
+        const auto proc = extract_json_string(line, "process_name");
+        const auto ch_id = extract_json_uint(line, "channel_id");
+        if (!proc.has_value() || !ch_id.has_value()) {
+            return make_err_response(id, "invalid_params");
+        }
+        const auto res = handler_->unbind_app_from_channel(*proc, static_cast<uint32_t>(*ch_id));
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "unbind_app_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"unbound\":true}");
+    }
+
+    if (*cmd == "auto_setup_defaults") {
+        const auto res = handler_->auto_setup_defaults();
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "auto_setup_failed" : res.error);
+        }
+        return make_ok_response(id, "{\"configured\":true}");
     }
 
     return make_err_response(id, "unknown_command");

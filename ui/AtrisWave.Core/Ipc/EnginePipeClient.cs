@@ -186,6 +186,113 @@ public sealed class EnginePipeClient : IDisposable
     public Task<EnginePipeResponse> ApplyRoutingRulesAsync(CancellationToken cancellationToken = default)
         => SendCommandAsync("apply_routing_rules", null, cancellationToken);
 
+    // --- v2 Dynamic Channel & Output Bus Commands ---
+
+    public async Task<IReadOnlyList<DynamicChannelModel>> ListChannelsAsync(CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync("list_channels", null, cancellationToken).ConfigureAwait(false);
+        if (!TryUnwrapResult(resp, out JsonElement result))
+        {
+            return [];
+        }
+
+        if (result.TryGetProperty("channels", out JsonElement el) && el.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<DynamicChannelModel>>(el.GetRawText()) ?? [];
+        }
+
+        return [];
+    }
+
+    public async Task<(bool Ok, uint ChannelId)> CreateChannelAsync(
+        string name,
+        string sourceType = "app_group",
+        string color = "#A855F7",
+        CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync(
+            "create_channel",
+            new { name, source_type = sourceType, color },
+            cancellationToken).ConfigureAwait(false);
+
+        if (TryUnwrapResult(resp, out JsonElement result) &&
+            result.TryGetProperty("channel_id", out JsonElement idEl))
+        {
+            return (true, idEl.GetUInt32());
+        }
+
+        return (resp.Ok, 0);
+    }
+
+    public Task<EnginePipeResponse> DeleteChannelAsync(uint channelId, CancellationToken cancellationToken = default)
+        => SendCommandAsync("delete_channel", new { channel_id = channelId }, cancellationToken);
+
+    public Task<EnginePipeResponse> RenameChannelAsync(uint channelId, string name, CancellationToken cancellationToken = default)
+        => SendCommandAsync("rename_channel", new { channel_id = channelId, name }, cancellationToken);
+
+    public Task<EnginePipeResponse> BindChannelSourceAsync(
+        uint channelId,
+        string sourceType,
+        string deviceId,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("bind_channel_source", new { channel_id = channelId, source_type = sourceType, device_id = deviceId }, cancellationToken);
+
+    public async Task<IReadOnlyList<OutputBusModel>> ListOutputBusesAsync(CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync("list_output_buses", null, cancellationToken).ConfigureAwait(false);
+        if (!TryUnwrapResult(resp, out JsonElement result))
+        {
+            return [];
+        }
+
+        if (result.TryGetProperty("buses", out JsonElement el) && el.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<OutputBusModel>>(el.GetRawText()) ?? [];
+        }
+
+        return [];
+    }
+
+    public Task<EnginePipeResponse> BindOutputBusAsync(
+        string busId,
+        string deviceId,
+        float volume,
+        bool muted,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("bind_output_bus", new { bus_id = busId, device_id = deviceId, volume, muted }, cancellationToken);
+
+    public Task<EnginePipeResponse> SetChannelSendAsync(
+        uint channelId,
+        string busId,
+        bool enabled,
+        float sendGain = 1.0f,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("set_channel_send", new { channel_id = channelId, bus_id = busId, enabled, send_gain = sendGain }, cancellationToken);
+
+    public Task<EnginePipeResponse> SetChannelDspAsync(
+        uint channelId,
+        float volume,
+        bool muted,
+        bool solo,
+        float pan = 0.0f,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("set_channel_dsp", new { channel_id = channelId, volume, muted, solo, pan }, cancellationToken);
+
+    public Task<EnginePipeResponse> BindAppToChannelAsync(
+        string processName,
+        uint channelId,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("bind_app_to_channel", new { process_name = processName, channel_id = channelId }, cancellationToken);
+
+    public Task<EnginePipeResponse> UnbindAppFromChannelAsync(
+        string processName,
+        uint channelId,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("unbind_app_from_channel", new { process_name = processName, channel_id = channelId }, cancellationToken);
+
+    public Task<EnginePipeResponse> AutoSetupDefaultsAsync(CancellationToken cancellationToken = default)
+        => SendCommandAsync("auto_setup_defaults", null, cancellationToken);
+
     private static bool TryUnwrapResult(EnginePipeResponse resp, out JsonElement result)
     {
         if (resp.Ok && resp.Payload is JsonElement root)

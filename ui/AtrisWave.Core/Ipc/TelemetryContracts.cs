@@ -3,18 +3,20 @@ using System.Runtime.InteropServices;
 namespace AtrisWave.Core.Ipc;
 
 /// <summary>
-/// Binary C-ABI constants matching <c>shared/include/atriswave/ipc_protocol.h</c>.
+/// Binary C-ABI constants matching <c>shared/include/atriswave/ipc_protocol.h</c> (Telemetry V2).
 /// </summary>
 public static class TelemetryConstants
 {
     public const string PipeName = "AtrisWaveEngine";
-    public const string SharedMemoryName = @"Local\AtrisWaveTelemetryV1";
+    public const string SharedMemoryName = @"Local\AtrisWaveTelemetryV2";
     public const uint Magic = 0x4157544Du; // "AWTM"
-    public const uint ProtocolVersion = 1u;
+    public const uint ProtocolVersion = 2u;
     public const int MaxChannels = 16;
+    public const int MaxBuses = 4;
     public const int HeaderSizeBytes = 64;
     public const int ChannelFrameSizeBytes = 32;
-    public const int TotalSnapshotSizeBytes = HeaderSizeBytes + (MaxChannels * ChannelFrameSizeBytes);
+    public const int TotalSnapshotSizeBytes =
+        HeaderSizeBytes + (MaxChannels * ChannelFrameSizeBytes) + (MaxBuses * ChannelFrameSizeBytes); // 704 bytes
 }
 
 /// <summary>
@@ -40,7 +42,7 @@ public enum ChannelMeterFlags : uint
 }
 
 /// <summary>
-/// Per-channel telemetry meter frame (32 bytes, C-ABI Pack=4).
+/// Per-channel / per-bus telemetry meter frame (32 bytes, C-ABI Pack=4).
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct ChannelMeterFrame
@@ -60,7 +62,7 @@ public struct ChannelMeterFrame
 }
 
 /// <summary>
-/// Shared-memory telemetry header (64 bytes, C-ABI Pack=4).
+/// Shared-memory telemetry header (64 bytes, C-ABI Pack=4, V2 with BusCount at offset 48).
 /// Uses <see cref="Sequence"/> as a seqlock counter: odd = write in progress, even = stable.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
@@ -76,24 +78,26 @@ public struct TelemetryHeader
     public ulong TimestampQpc;
     public float CpuLoadPercent;
     public uint XrunCount;
-    public uint Reserved0;
+    public uint BusCount;
     public uint Reserved1;
     public uint Reserved2;
     public uint Reserved3;
 }
 
 /// <summary>
-/// Consistent, seqlock-verified telemetry snapshot read from shared memory.
+/// Consistent, seqlock-verified Telemetry V2 snapshot read from shared memory (16 channels + 4 buses).
 /// </summary>
 public sealed class TelemetrySnapshot
 {
     public TelemetryHeader Header { get; }
     public ChannelMeterFrame[] Channels { get; }
+    public ChannelMeterFrame[] Buses { get; }
 
-    public TelemetrySnapshot(TelemetryHeader header, ChannelMeterFrame[] channels)
+    public TelemetrySnapshot(TelemetryHeader header, ChannelMeterFrame[] channels, ChannelMeterFrame[]? buses = null)
     {
         Header = header;
         Channels = channels;
+        Buses = buses ?? new ChannelMeterFrame[TelemetryConstants.MaxBuses];
     }
 
     public EngineState State => Enum.IsDefined(typeof(EngineState), Header.EngineState)

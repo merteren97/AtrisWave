@@ -20,6 +20,7 @@ add_library(atriswave_engine_core STATIC
     src/audio/config_store.cpp
     src/audio/routing_rules.cpp
     src/audio/driver_bridge.cpp
+    src/audio/failsafe_watchdog.cpp
     src/audio/audio_engine.cpp
 )
 
@@ -59,6 +60,15 @@ add_executable(AtrisWaveEngine
 )
 
 target_link_libraries(AtrisWaveEngine
+    PRIVATE
+        atriswave_engine_core
+)
+
+add_executable(AtrisWaveWatchdog
+    src/watchdog_main.cpp
+)
+
+target_link_libraries(AtrisWaveWatchdog
     PRIVATE
         atriswave_engine_core
 )
@@ -103,4 +113,18 @@ target_link_libraries(atriswave_driver_bridge_tests
 add_test(
     NAME atriswave_driver_bridge_tests
     COMMAND atriswave_driver_bridge_tests
+)
+
+add_executable(atriswave_v2_mixer_tests
+    tests/v2_mixer_tests.cpp
+)
+
+target_link_libraries(atriswave_v2_mixer_tests
+    PRIVATE
+        atriswave_engine_core
+)
+
+add_test(
+    NAME atriswave_v2_mixer_tests
+    COMMAND atriswave_v2_mixer_tests
 )

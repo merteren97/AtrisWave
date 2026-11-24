@@ -40,7 +40,7 @@ EXTERN_C __declspec(selectany) const GUID GUID_DEVINTERFACE_ATRISWAVE_VAD = {
 
 #define ATRISWAVE_DRIVER_ABI_VERSION  1u
 #define ATRISWAVE_VAD_RING_MAGIC      0x41575644u /* "AWVD" */
-#define ATRISWAVE_VAD_ENDPOINT_COUNT  6u
+#define ATRISWAVE_VAD_ENDPOINT_COUNT  16u
 
 #define ATRISWAVE_VAD_MIN_SAMPLE_RATE 8000u
 #define ATRISWAVE_VAD_MAX_SAMPLE_RATE 192000u
@@ -65,14 +65,27 @@ EXTERN_C __declspec(selectany) const GUID GUID_DEVINTERFACE_ATRISWAVE_VAD = {
 #define IOCTL_ATRISWAVE_SET_ENDPOINT_FORMAT \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
+#define IOCTL_ATRISWAVE_SET_ENDPOINT_CONNECTED \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+
 #ifndef __cplusplus
 typedef enum AtrisWaveVadEndpointId {
-    ATRISWAVE_VAD_ENDPOINT_GAME = 0,
-    ATRISWAVE_VAD_ENDPOINT_CHAT = 1,
-    ATRISWAVE_VAD_ENDPOINT_MEDIA = 2,
-    ATRISWAVE_VAD_ENDPOINT_AUX = 3,
-    ATRISWAVE_VAD_ENDPOINT_MIC_OUT = 4,
-    ATRISWAVE_VAD_ENDPOINT_STREAM_MIX = 5
+    ATRISWAVE_VAD_ENDPOINT_SYSTEM = 0,
+    ATRISWAVE_VAD_ENDPOINT_MIC_OUT = 1,
+    ATRISWAVE_VAD_ENDPOINT_STREAM_MIX = 2,
+    ATRISWAVE_VAD_ENDPOINT_CH4 = 3,
+    ATRISWAVE_VAD_ENDPOINT_CH5 = 4,
+    ATRISWAVE_VAD_ENDPOINT_CH6 = 5,
+    ATRISWAVE_VAD_ENDPOINT_CH7 = 6,
+    ATRISWAVE_VAD_ENDPOINT_CH8 = 7,
+    ATRISWAVE_VAD_ENDPOINT_CH9 = 8,
+    ATRISWAVE_VAD_ENDPOINT_CH10 = 9,
+    ATRISWAVE_VAD_ENDPOINT_CH11 = 10,
+    ATRISWAVE_VAD_ENDPOINT_CH12 = 11,
+    ATRISWAVE_VAD_ENDPOINT_CH13 = 12,
+    ATRISWAVE_VAD_ENDPOINT_CH14 = 13,
+    ATRISWAVE_VAD_ENDPOINT_CH15 = 14,
+    ATRISWAVE_VAD_ENDPOINT_CH16 = 15
 } AtrisWaveVadEndpointId;
 #endif
 
@@ -139,18 +152,34 @@ typedef struct AtrisWaveVadRingMapInfo {
     uint32_t reserved;
 } AtrisWaveVadRingMapInfo;
 
+typedef struct AtrisWaveVadSetConnectedRequest {
+    uint32_t endpoint_id;
+    uint32_t connected;
+} AtrisWaveVadSetConnectedRequest;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
 } /* extern "C" */
 
 enum class AtrisWaveVadEndpointId : uint32_t {
+    System = 0,
     Game = 0,
-    Chat = 1,
-    Media = 2,
-    Aux = 3,
-    MicOut = 4,
-    StreamMix = 5
+    MicOut = 1,
+    StreamMix = 2,
+    Ch4 = 3,
+    Ch5 = 4,
+    Ch6 = 5,
+    Ch7 = 6,
+    Ch8 = 7,
+    Ch9 = 8,
+    Ch10 = 9,
+    Ch11 = 10,
+    Ch12 = 11,
+    Ch13 = 12,
+    Ch14 = 13,
+    Ch15 = 14,
+    Ch16 = 15
 };
 
 static_assert(sizeof(AtrisWaveVadVersionInfo) == 24, "AtrisWaveVadVersionInfo must be 24 bytes");
@@ -186,4 +215,6 @@ static_assert(sizeof(AtrisWaveVadEndpointFormatRequest) == 16,
               "AtrisWaveVadEndpointFormatRequest must be 16 bytes");
 static_assert(sizeof(AtrisWaveVadRingMapInfo) == 32,
               "AtrisWaveVadRingMapInfo must be 32 bytes");
+static_assert(sizeof(AtrisWaveVadSetConnectedRequest) == 8,
+              "AtrisWaveVadSetConnectedRequest must be 8 bytes");
 #endif

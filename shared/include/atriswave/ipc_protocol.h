@@ -10,12 +10,13 @@ extern "C" {
 #define ATRISWAVE_PIPE_NAME_A "\\\\.\\pipe\\AtrisWaveEngine"
 #define ATRISWAVE_PIPE_NAME_W L"\\\\.\\pipe\\AtrisWaveEngine"
 
-#define ATRISWAVE_TELEMETRY_SHM_NAME_A "Local\\AtrisWaveTelemetryV1"
-#define ATRISWAVE_TELEMETRY_SHM_NAME_W L"Local\\AtrisWaveTelemetryV1"
+#define ATRISWAVE_TELEMETRY_SHM_NAME_A "Local\\AtrisWaveTelemetryV2"
+#define ATRISWAVE_TELEMETRY_SHM_NAME_W L"Local\\AtrisWaveTelemetryV2"
 
 #define ATRISWAVE_TELEMETRY_MAGIC 0x4157544Du /* "AWTM" */
-#define ATRISWAVE_TELEMETRY_VERSION 1u
+#define ATRISWAVE_TELEMETRY_VERSION 2u
 #define ATRISWAVE_MAX_CHANNELS 16u
+#define ATRISWAVE_MAX_BUSES 4u /* 0=A1, 1=A2, 2=B1, 3=B2 */
 
 enum AtrisWaveEngineState {
     ATRISWAVE_ENGINE_STATE_STOPPED = 0u,
@@ -54,12 +55,14 @@ typedef struct TelemetryHeader {
     uint64_t timestamp_qpc;
     float cpu_load_percent;
     uint32_t xrun_count;
-    uint8_t reserved[16];
+    uint32_t bus_count;
+    uint8_t reserved[12];
 } TelemetryHeader;
 
 typedef struct TelemetrySnapshot {
     TelemetryHeader header;
     ChannelMeterFrame channels[ATRISWAVE_MAX_CHANNELS];
+    ChannelMeterFrame buses[ATRISWAVE_MAX_BUSES];
 } TelemetrySnapshot;
 
 #pragma pack(pop)
@@ -89,9 +92,11 @@ static_assert(offsetof(TelemetryHeader, sequence) % alignof(uint64_t) == 0, "seq
 static_assert(offsetof(TelemetryHeader, timestamp_qpc) == 32, "timestamp_qpc offset mismatch");
 static_assert(offsetof(TelemetryHeader, cpu_load_percent) == 40, "cpu_load_percent offset mismatch");
 static_assert(offsetof(TelemetryHeader, xrun_count) == 44, "xrun_count offset mismatch");
-static_assert(offsetof(TelemetryHeader, reserved) == 48, "reserved offset mismatch");
+static_assert(offsetof(TelemetryHeader, bus_count) == 48, "bus_count offset mismatch");
+static_assert(offsetof(TelemetryHeader, reserved) == 52, "reserved offset mismatch");
 
-static_assert(sizeof(TelemetrySnapshot) == 576, "TelemetrySnapshot must be 576 bytes");
+static_assert(sizeof(TelemetrySnapshot) == 704u, "TelemetrySnapshot must be 704 bytes");
 static_assert(offsetof(TelemetrySnapshot, header) == 0, "header offset mismatch");
 static_assert(offsetof(TelemetrySnapshot, channels) == 64, "channels offset mismatch");
+static_assert(offsetof(TelemetrySnapshot, buses) == 576, "buses offset mismatch");
 #endif

@@ -2,27 +2,34 @@
 
 #include <atriswave/audio/app_router.hpp>
 #include <atriswave/audio/driver_bridge.hpp>
+#include <atriswave/audio/failsafe_watchdog.hpp>
 #include <atriswave/audio/process_loopback.hpp>
 #include <atriswave/audio/routing_rules.hpp>
 #include <atriswave/audio/wasapi_devices.hpp>
 #include <atriswave/audio/wasapi_stream.hpp>
 #include <atriswave/control_server.hpp>
+#include <atriswave/dsp/dynamic_mixer.hpp>
 #include <atriswave/dsp/mic_pipeline.hpp>
-#include <atriswave/dsp/mixer_bus.hpp>
+#include <atriswave/dsp/pll_resampler.hpp>
 #include <atriswave/spsc_ring_buffer.hpp>
 #include <atriswave/telemetry_publisher.hpp>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace atriswave {
 
-/// Top-level Phase 1 Audio Engine coordinating WASAPI streams, Dual-Path Mic DSP,
-/// 6-channel MixerBus, Process Loopback capture, TelemetryPublisher, and ControlServer.
+/// Top-level v2 Audio Engine coordinating:
+/// - Dedicated High-Resolution Master Clock Thread (10ms @ 48kHz, MmcssGuard "Pro Audio")
+/// - Dynamic 16-channel x 4-bus (A1, A2, B1, B2) mixer with per-channel EQ/Comp/Ducking
+/// - Feedback-loop blocker (direct ID + virtual_pair_group) & ProcessLoopback A1/A2 echo lock
+/// - Dual-Path Mic DSP, AdaptivePllResampler per non-master stream, Telemetry V2 (704B), ControlServer
 class AudioEngine final : public ControlServer::IControlHandler {
 public:
     AudioEngine() noexcept = default;
@@ -36,7 +43,7 @@ public:
 
     void publish_telemetry_tick() noexcept;
 
-    // ControlServer::IControlHandler
+    // ControlServer::IControlHandler (Phase 0-2)
     [[nodiscard]] ControlServer::StatusSnapshot get_status() override;
     void on_shutdown() override;
     [[nodiscard]] std::vector<audio::AudioDeviceInfo> list_devices() override;
@@ -59,58 +66,114 @@ public:
     [[nodiscard]] bool delete_routing_rule(const std::string& process_name) override;
     [[nodiscard]] uint32_t apply_routing_rules() override;
 
+    // v2 Dynamic Multi-Channel & Output Bus Matrix
+    [[nodiscard]] std::vector<DynamicChannelInfo> list_channels() override;
+    [[nodiscard]] V2CommandResult create_channel(const std::string& name,
+                                                 const std::string& source_type,
+                                                 const std::string& color) override;
+    [[nodiscard]] V2CommandResult delete_channel(uint32_t channel_id) override;
+    [[nodiscard]] V2CommandResult rename_channel(uint32_t channel_id,
+                                                 const std::string& name) override;
+    [[nodiscard]] V2CommandResult bind_channel_source(uint32_t channel_id,
+                                                      const std::string& source_type,
+                                                      const std::string& device_id) override;
+    [[nodiscard]] std::vector<OutputBusInfo> list_output_buses() override;
+    [[nodiscard]] V2CommandResult bind_output_bus(const std::string& bus_id,
+                                                  const std::string& device_id,
+                                                  float volume,
+                                                  bool muted) override;
+    [[nodiscard]] V2CommandResult set_channel_send(uint32_t channel_id,
+                                                   const std::string& bus_id,
+                                                   bool enabled,
+                                                   float send_gain) override;
+    [[nodiscard]] V2CommandResult set_channel_dsp(const ChannelDspConfig& cfg) override;
+    [[nodiscard]] V2CommandResult bind_app_to_channel(const std::string& process_name,
+                                                      uint32_t channel_id) override;
+    [[nodiscard]] V2CommandResult unbind_app_from_channel(const std::string& process_name,
+                                                          uint32_t channel_id) override;
+    [[nodiscard]] V2CommandResult auto_setup_defaults() override;
+
 private:
-    void on_mic_capture(float* data, uint32_t frames, uint32_t channels) noexcept;
-    void on_monitor_render(float* data, uint32_t frames, uint32_t channels) noexcept;
-    void on_output_render(float* data, uint32_t frames, uint32_t channels) noexcept;
-    void on_loopback_capture(const float* data, uint32_t frames, uint32_t channels) noexcept;
-
-    void* shutdown_event_{nullptr};
-    TelemetryPublisher telemetry_;
-    ControlServer control_server_;
-
-    dsp::MicPipeline mic_pipeline_;
-    dsp::MixerBus mixer_bus_;
-
     struct StereoFrame {
         float l{0.0f};
         float r{0.0f};
     };
 
-    // Lock-free SPSC stereo ring buffers between capture/loopback and render threads
-    SpscRingBuffer<StereoFrame, 16384> monitor_ring_;
-    SpscRingBuffer<StereoFrame, 16384> output_ring_;
-    SpscRingBuffer<StereoFrame, 16384> loopback_ring_;
+    struct ChannelRuntime {
+        bool occupied{false};
+        DynamicChannelInfo info{};
+        std::string pair_group;
+        SpscRingBuffer<StereoFrame, 4096> input_ring;
+        dsp::AdaptivePllResampler pll_l;
+        dsp::AdaptivePllResampler pll_r;
+        std::atomic<bool> stream_active{false};
+        audio::WasapiStream capture_stream;
+        audio::ProcessLoopbackCapture loopback_capture;
+    };
 
-    std::atomic<bool> monitor_active_{false};
-    std::atomic<bool> output_active_{false};
-    std::atomic<bool> loopback_active_{false};
+    struct OutputBusRuntime {
+        OutputBusInfo info{};
+        std::string pair_group;
+        SpscRingBuffer<StereoFrame, 4096> output_ring;
+        dsp::AdaptivePllResampler pll_l;
+        dsp::AdaptivePllResampler pll_r;
+        std::atomic<bool> stream_active{false};
+        audio::WasapiStream render_stream;
+    };
 
-    // Pre-allocated RT scratch buffers (sized for up to 4096 frames)
-    static constexpr size_t kMaxScratchFrames = 4096;
-    std::vector<float> mono_in_scratch_;
-    std::vector<float> mon_l_scratch_;
-    std::vector<float> mon_r_scratch_;
-    std::vector<float> bcast_l_scratch_;
-    std::vector<float> bcast_r_scratch_;
-    std::vector<float> loop_l_scratch_;
-    std::vector<float> loop_r_scratch_;
-    std::vector<float> mix_l_scratch_;
-    std::vector<float> mix_r_scratch_;
+    void init_default_slots();
+    void master_clock_loop();
+    void process_master_tick(size_t frames) noexcept;
 
-    std::mutex device_mutex_;
-    audio::WasapiStream capture_stream_;
-    audio::WasapiStream monitor_stream_;
-    audio::WasapiStream output_stream_;
-    audio::ProcessLoopbackCapture loopback_capture_;
+    [[nodiscard]] bool would_create_feedback_loop_locked(
+        uint32_t ch_idx,
+        const std::string& ch_device_id,
+        const std::string& ch_pair_group,
+        size_t bus_idx,
+        const std::string& bus_device_id,
+        const std::string& bus_pair_group) const;
+
+    [[nodiscard]] static int bus_index_from_id(const std::string& bus_id) noexcept;
+    [[nodiscard]] std::string resolve_pair_group(const std::string& device_id) const;
+
+    void on_channel_capture(uint32_t ch_idx, float* data, uint32_t frames, uint32_t channels) noexcept;
+    void on_channel_loopback(uint32_t ch_idx, const float* data, uint32_t frames, uint32_t channels) noexcept;
+    void on_bus_render(size_t bus_idx, float* data, uint32_t frames, uint32_t channels) noexcept;
+
+    void* shutdown_event_{nullptr};
+    void* master_stop_event_{nullptr};
+    std::atomic<bool> master_running_{false};
+    std::thread master_thread_;
+
+    TelemetryPublisher telemetry_;
+    ControlServer control_server_;
+
+    dsp::MicPipeline mic_pipeline_;
+    dsp::DynamicMixer dynamic_mixer_;
+
+    static constexpr size_t kMasterTickFrames = 480; // 10ms @ 48kHz
+    std::array<std::vector<float>, dsp::kDynamicMaxChannels> ch_in_l_;
+    std::array<std::vector<float>, dsp::kDynamicMaxChannels> ch_in_r_;
+    std::vector<float> mic_mono_scratch_;
+    std::vector<float> mic_mon_l_;
+    std::vector<float> mic_mon_r_;
+    std::vector<float> mic_bcast_l_;
+    std::vector<float> mic_bcast_r_;
+    std::array<std::vector<float>, dsp::kDynamicMaxBuses> bus_out_l_;
+    std::array<std::vector<float>, dsp::kDynamicMaxBuses> bus_out_r_;
+
+    mutable std::mutex state_mutex_;
+    std::array<ChannelRuntime, dsp::kDynamicMaxChannels> channels_{};
+    std::array<OutputBusRuntime, dsp::kDynamicMaxBuses> buses_{};
 
     std::mutex config_mutex_;
     MicDspConfig current_mic_cfg_{};
     audio::RoutingRulesStore routing_rules_;
+    audio::FailsafeWatchdog failsafe_;
 
     std::atomic<uint32_t> engine_state_{ATRISWAVE_ENGINE_STATE_STOPPED};
     std::atomic<uint32_t> sample_rate_{48000};
-    std::atomic<uint32_t> buffer_frames_{128};
+    std::atomic<uint32_t> buffer_frames_{480};
     std::atomic<uint32_t> xrun_count_{0};
 };
 

@@ -42,10 +42,12 @@ int g_failures = 0;
 void test_c_abi_layout() {
     ATRIS_CHECK(sizeof(ChannelMeterFrame) == 32, "ChannelMeterFrame size == 32");
     ATRIS_CHECK(sizeof(TelemetryHeader) == 64, "TelemetryHeader size == 64");
-    ATRIS_CHECK(sizeof(TelemetrySnapshot) == 576, "TelemetrySnapshot size == 576");
+    ATRIS_CHECK(sizeof(TelemetrySnapshot) == 704, "TelemetrySnapshot size == 704");
     ATRIS_CHECK(offsetof(TelemetryHeader, sequence) == 24, "sequence offset == 24");
     ATRIS_CHECK(offsetof(TelemetryHeader, timestamp_qpc) == 32, "timestamp_qpc offset == 32");
+    ATRIS_CHECK(offsetof(TelemetryHeader, bus_count) == 48, "bus_count offset == 48");
     ATRIS_CHECK(offsetof(TelemetrySnapshot, channels) == 64, "channels offset == 64");
+    ATRIS_CHECK(offsetof(TelemetrySnapshot, buses) == 576, "buses offset == 576");
 }
 
 void test_spsc_ring_buffer() {

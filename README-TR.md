@@ -12,7 +12,9 @@
 
 ## Temel Özellikler
 
-- **Sanal Kanal Ayırma**: *Master*, *Game*, *Chat*, *Media*, *Aux* ve *Microphone* kanallarını bağımsız fader'lar, sessize alma (mute) / solo kontrolleri ve yayın/monitör alt miksleriyle yönetin.
+- **Dinamik 16 Kanallı Raf (`+ Kanal Ekle`)**: Varsayılan *System* (genel yakalama) ve *Microphone* kanallarıyla başlayın veya sürükle-bırak uygulama bağlama, fader ve mute/solo kontrolleriyle 16 adede kadar sanal kanalı dinamik olarak ekleyin/yeniden adlandırın/silin.
+- **`A1 / A2 / B1 / B2` Donanım ve Sanal Çıkış Matrisi**: Her kanalı 4 ana çıkış veriyoluna (*A1/A2* fiziksel kulaklık/hoparlör, *B1/B2* sanal yayın/sohbet) bağımsız yönlendirin; kanal başı `-0.5 dBFS` lookahead limiter, **Geri Besleme Döngüsü Engelleyici** ve **Process Loopback `A1/A2` Yankı Kilidi** ile güvende kalın.
+- **Adanmış Yüksek Çözünürlüklü Ana Saat ve Failsafe Watchdog**: Akış başı `AdaptivePllResampler` ile 10 ms `CreateWaitableTimerExW` Ana Saat ve Windows varsayılan ses cihazını koruyan 3 katmanlı `AtrisWaveWatchdog.exe` failsafe koruması.
 - **WASAPI `IAudioClient3` ve Uygulama Bazlı Yönlendirme**: **WASAPI Process Loopback** (`AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS`) ve kalıcı uygulama yönlendirme kuralları ile düşük gecikmeli Windows ses altyapısı.
 - **Tam Çift Yollu (Dual-Path) Mikrofon DSP'si**:
   - **Doğrudan Monitör (Sidetone)**: Ağır spektral/reverb aşamalarını atlayarak kendi sesinizi **~6–12 ms** (WASAPI `IAudioClient3`) gecikmeyle duyun.
@@ -28,18 +30,18 @@
 AtrisWave; arayüz çizimini, gerçek zamanlı DSP işlemlerini, üçüncü parti eklenti yürütmesini ve çekirdek (kernel) ses uç noktalarını birbirinden ayırır (ayrıntılı teknik özellikler için [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) dosyasına bakın):
 
 ```text
-  [ C# .NET 10 WPF Arayüzü ] <── 576B Seqlock SHM (60 FPS) ── [ C++20 Ses Motoru ]
-   (ui/ — Wpf.Ui + Skia)      ── Named Pipe JSON Komutları ─>  (engine/ — Session 1+)
-                                                                 │            │
-                                       5ms Çökme-Baypas SHM ─────┘            └── Doğrudan Ring / IOCTL
-                                                  v                                        v
-                                     [ AtrisWavePluginHost.exe ]              [ AtrisWaveVAD.sys (WDK) ]
-                                     (plugin-host/ — CLAP/VST3)                (driver/ — 6 Uç Nokta)
+  [ C# .NET 10 WPF Arayüzü ] <── 704B Seqlock SHM V2 (60 FPS) ── [ C++20 Ses Motoru ]
+   (ui/ — Wpf.Ui + Skia)      ── Named Pipe JSON Komutları ─────>  (engine/ — Session 1+)
+                                                                     │       │       │
+                                           5ms Çökme-Baypas SHM ─────┘       │       └── Doğrudan Ring / IOCTL
+                                                   v                         v                  v
+                                      [ AtrisWavePluginHost.exe ]     [ Watchdog.exe ]  [ AtrisWaveVAD.sys ]
+                                      (plugin-host/ — CLAP/VST3)      (Failsafe)        (driver/ — 16 Slot Havuzu)
 ```
 
-1. **Masaüstü Arayüzü (`ui/`)**: `Wpf.Ui` Fluent teması, `SkiaSharp.Views.WPF` (`SKElement`) 60 FPS metreler, `H.NotifyIcon.Wpf` sistem tepsisi, genel kısayollar ve loopback JSON-RPC sunucusu içeren C# `.NET 10` WPF uygulaması (`AtrisWave.UI.exe`).
-2. **Ses Motoru (`engine/`)**: MMCSS `"Pro Audio"` önceliği, FTZ/DAZ denormal temizleme, kilitsiz (lock-free) SPSC halka tamponları, WASAPI `IAudioClient3` / Process Loopback ve sıfır bellek ayırmalı DSP ile çalışan başsız **C++20** Session 1+ arka plan motoru (`AtrisWaveEngine.exe`).
-3. **Sanal Ses Sürücüsü (`driver/`)**: 6 sanal uç nokta (*Game*, *Chat*, *Media*, *Aux*, *Processed Mic*, *Stream Mix*) sunan, RFC 3161 test imzalama ve Attestation Signing betiklerine (`driver/scripts/build-and-testsign.ps1`) sahip C++ WDK **WaveRT / SysVAD** çekirdek sürücüsü (`AtrisWaveVAD.sys`).
+1. **Masaüstü Arayüzü (`ui/`)**: `Wpf.Ui` Fluent teması, `SkiaSharp.Views.WPF` (`SKElement`) 60 FPS metreler, `H.NotifyIcon.Wpf` sistem tepsisi, rehberli Ses Sağlığı Kontrolü, genel kısayollar ve loopback JSON-RPC sunucusu içeren C# `.NET 10` WPF uygulaması (`AtrisWave.UI.exe`).
+2. **Ses Motoru ve Failsafe (`engine/`)**: MMCSS `"Pro Audio"` öncelikli `CreateWaitableTimerExW` Ana Saati, FTZ/DAZ denormal temizleme, `AdaptivePllResampler`, kilitsiz SPSC halka tamponları ve `AtrisWaveWatchdog.exe` varsayılan cihaz failsafe koruması ile çalışan başsız **C++20** Session 1+ motoru (`AtrisWaveEngine.exe`).
+3. **Sanal Ses Sürücüsü (`driver/`)**: **16 slotlu `KSJACK_DESCRIPTION.IsConnected` havuzlu uç nokta** mimarisine ve RFC 3161 test imzalama / Attestation Signing betiklerine (`driver/scripts/build-and-testsign.ps1`) sahip C++ WDK **WaveRT / SysVAD** çekirdek sürücüsü (`AtrisWaveVAD.sys`).
 4. **Süreç Dışı Eklenti Barındırıcı (`plugin-host/`)**: Kilitsiz paylaşımlı bellek ses aktarımı ve otomatik 5 ms çökme-baypas koruması sunan izole C++20 **CLAP** ve **VST3 (3.8+)** eklenti barındırıcısı (`AtrisWavePluginHost.exe`).
 
 ---

@@ -16,11 +16,12 @@
 
 #include <cmath>
 #include <iostream>
+#include <memory>
 #include <string_view>
 
 namespace {
 
-constexpr const char* kEngineVersion = "1.0.0-rc1";
+constexpr const char* kEngineVersion = "2.0.0-alpha";
 HANDLE g_shutdown_event = nullptr;
 
 BOOL WINAPI console_ctrl_handler(DWORD ctrl_type) noexcept {
@@ -116,8 +117,8 @@ int main(int argc, char* argv[]) {
     g_shutdown_event = shutdown_event;
     SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
 
-    atriswave::AudioEngine engine;
-    if (!engine.start(shutdown_event, headless_test)) {
+    auto engine = std::make_unique<atriswave::AudioEngine>();
+    if (!engine->start(shutdown_event, headless_test)) {
         std::cerr << "Failed to start AtrisWave AudioEngine\n";
         SetConsoleCtrlHandler(console_ctrl_handler, FALSE);
         g_shutdown_event = nullptr;
@@ -126,10 +127,10 @@ int main(int argc, char* argv[]) {
     }
 
     while (WaitForSingleObject(shutdown_event, 16) == WAIT_TIMEOUT) {
-        engine.publish_telemetry_tick();
+        engine->publish_telemetry_tick();
     }
 
-    engine.stop();
+    engine->stop();
     SetConsoleCtrlHandler(console_ctrl_handler, FALSE);
     g_shutdown_event = nullptr;
     CloseHandle(shutdown_event);

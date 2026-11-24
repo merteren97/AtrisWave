@@ -20,6 +20,8 @@ typedef struct AtrisWaveEndpointDescriptor {
     const wchar_t* pin_name;
     uint32_t default_sample_rate;
     uint32_t default_channels;
+    uint32_t default_jack_connected;
+    uint32_t presence_detect_capable;
 } AtrisWaveEndpointDescriptor;
 
 typedef struct AtrisWaveEndpointRuntime {
@@ -28,6 +30,8 @@ typedef struct AtrisWaveEndpointRuntime {
     size_t pcm_buffer_bytes;
     uint64_t frames_transferred;
     uint32_t active;
+    uint32_t jack_connected;
+    uint32_t presence_detect_capable;
     uint32_t reserved;
 } AtrisWaveEndpointRuntime;
 
@@ -67,6 +71,15 @@ NTSTATUS AtrisWaveMapEndpointRing(
     PATRISWAVE_DEVICE_CONTEXT ctx,
     uint32_t endpoint_id,
     AtrisWaveVadRingMapInfo* out_info);
+
+NTSTATUS AtrisWaveSetEndpointConnected(
+    PATRISWAVE_DEVICE_CONTEXT ctx,
+    uint32_t endpoint_id,
+    uint32_t connected);
+
+void AtrisWaveSignalJackInfoChange(
+    PATRISWAVE_DEVICE_CONTEXT ctx,
+    uint32_t endpoint_id);
 
 /* DISPATCH_LEVEL-safe zero-DSP WaveRT/ACX cyclic ring transfer entrypoints */
 uint32_t AtrisWaveRtPushFramesDispatch(

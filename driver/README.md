@@ -1,16 +1,14 @@
 # AtrisWave Virtual Audio Driver (`driver/`)
 
-`AtrisWaveVAD.sys` is AtrisWave's Phase 2 KMDF 1.33 / WaveRT-ACX virtual audio driver providing 6 zero-DSP kernel endpoints connected to `AtrisWaveEngine.exe` via hardened `METHOD_BUFFERED` IOCTLs and a lock-free shared ring buffer.
+`AtrisWaveVAD.sys` is AtrisWave's Phase 2 KMDF 1.33 / WaveRT-ACX virtual audio driver providing a **16-slot pre-provisioned dynamic endpoint pool** connected to `AtrisWaveEngine.exe` via hardened `METHOD_BUFFERED` IOCTLs and a lock-free shared ring buffer.
 
 ## Exposed Virtual Endpoints (`ROOT\AtrisWaveVAD`)
-| ID | Endpoint Name | Direction | Purpose |
-|---:|---|---|---|
-| `0` | **AtrisWave Game** | Render (Playback) | Game audio channel |
-| `1` | **AtrisWave Chat** | Render (Playback) | Voice / Discord / Teamspeak channel |
-| `2` | **AtrisWave Media** | Render (Playback) | Browser / Spotify / media channel |
-| `3` | **AtrisWave Aux** | Render (Playback) | Alerts / soundboard / aux channel |
-| `4` | **AtrisWave Mic** | Capture (Recording) | Processed microphone output |
-| `5` | **AtrisWave Stream Mix** | Capture (Recording) | Final OBS / streaming mix output |
+| ID | Endpoint Name | Direction | Default State | Purpose |
+|---:|---|---|---|---|
+| `0` | **AtrisWave System** | Render (Playback) | Connected | Default catch-all Windows playback channel |
+| `1` | **AtrisWave Mic** | Capture (Recording) | Connected | Processed microphone output (`B1`) |
+| `2` | **AtrisWave Stream Mix** | Capture (Recording) | Connected | Final OBS / streaming mix output (`B2`) |
+| `3..15` | **AtrisWave Ch 4..16** | Render (Playback) | Unplugged (`IsConnected=0`) | Dynamic pooled channels toggled via `IOCTL_ATRISWAVE_SET_ENDPOINT_CONNECTED` |
 
 ## Directory Structure
 - [AtrisWaveVAD.inf](AtrisWaveVAD.inf): Multi-endpoint Windows 10/11 (`x64` & `ARM64`) INF registering `ROOT\AtrisWaveVAD`, KMDF `1.33`, and `GUID_DEVINTERFACE_ATRISWAVE_VAD`.

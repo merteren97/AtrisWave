@@ -154,7 +154,7 @@
                     Margin="20,0,20,20"
                     Background="Transparent"
                     BorderThickness="0">
-            <!-- TAB 1: Studio Mixer -->
+            <!-- TAB 1: Studio Mixer (v2 Dynamic Channels + A1/A2/B1/B2 Output Matrix) -->
             <TabItem Header="{DynamicResource Tab_StudioMixer}">
                 <Grid Margin="0,10,0,0">
                     <Grid.RowDefinitions>
@@ -162,192 +162,365 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- Hardware I/O Selector Strip -->
+                    <!-- First-Run Guided Audio Setup / Health Check Banner -->
                     <Border Grid.Row="0"
-                            Margin="0,0,0,12"
-                            Padding="14,10"
+                            Margin="0,0,0,10"
+                            Padding="12,8"
                             CornerRadius="10"
-                            Background="#14FFFFFF"
-                            BorderBrush="#22FFFFFF"
+                            Background="#1C0F172A"
+                            BorderBrush="#2AFFFFFF"
                             BorderThickness="1">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="{DynamicResource Io_MicInput}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
-                                <ComboBox ItemsSource="{Binding InputDevices}"
-                                          SelectedItem="{Binding SelectedInputDevice}"
-                                          ItemTemplate="{StaticResource DeviceComboItemTemplate}" />
+                        <DockPanel>
+                            <ui:Button DockPanel.Dock="Right"
+                                       Content="{DynamicResource Health_AutoSetup}"
+                                       Command="{Binding AutoSetupDefaultsCommand}"
+                                       Appearance="Primary"
+                                       Padding="12,5" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="9"
+                                         Height="9"
+                                         Margin="0,0,10,0"
+                                         Fill="{Binding IsHealthWarning, Converter={StaticResource ConnectionStatusBrushConverter}}" />
+                                <TextBlock Text="{DynamicResource Health_Title}"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center" />
+                                <TextBlock FontSize="12" Foreground="#CBD5E1" VerticalAlignment="Center">
+                                    <TextBlock.Text>
+                                        <MultiBinding Converter="{StaticResource LocKeyConverter}">
+                                            <Binding Path="HealthMessageKey" />
+                                            <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
                             </StackPanel>
-
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="{DynamicResource Io_MonitorOutput}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
-                                <ComboBox ItemsSource="{Binding OutputDevices}"
-                                          SelectedItem="{Binding SelectedMonitorDevice}"
-                                          ItemTemplate="{StaticResource DeviceComboItemTemplate}" />
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="4">
-                                <TextBlock Text="{DynamicResource Io_VirtualOutput}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
-                                <ComboBox ItemsSource="{Binding OutputDevices}"
-                                          SelectedItem="{Binding SelectedVirtualOutputDevice}"
-                                          ItemTemplate="{StaticResource DeviceComboItemTemplate}" />
-                            </StackPanel>
-
-                            <ui:Button Grid.Column="6"
-                                       Content="{DynamicResource Io_RefreshDevices}"
-                                       Command="{Binding RefreshDevicesCommand}"
-                                       VerticalAlignment="Bottom"
-                                       Padding="14,7" />
-                        </Grid>
+                        </DockPanel>
                     </Border>
 
-                    <!-- 6 Virtual Mixer Channels -->
-                    <Border Grid.Row="1"
-                            Padding="18"
-                            CornerRadius="12"
-                            Background="#14FFFFFF"
-                            BorderBrush="#22FFFFFF"
-                            BorderThickness="1">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
+                    <!-- Left/Center: Dynamic Channel Rack | Right: A1/A2/B1/B2 Master Output Buses -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2.1*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="1.0*" />
+                        </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Row="0" Margin="0,0,0,14">
-                                <TextBlock Text="{DynamicResource Mixer_SectionTitle}"
-                                           FontSize="16"
-                                           FontWeight="SemiBold" />
-                                <TextBlock Text="{DynamicResource Mixer_SectionSubtitle}"
-                                           FontSize="12"
-                                           Foreground="#94A3B8"
-                                           Margin="0,2,0,0" />
-                            </StackPanel>
+                        <!-- Dynamic Channel Rack -->
+                        <Border Grid.Column="0"
+                                Padding="14"
+                                CornerRadius="12"
+                                Background="#14FFFFFF"
+                                BorderBrush="#22FFFFFF"
+                                BorderThickness="1">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                            <ItemsControl Grid.Row="1" ItemsSource="{Binding Channels}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <UniformGrid Rows="1" Columns="6" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Margin="4,0"
-                                                Padding="10,12"
-                                                CornerRadius="10"
-                                                Background="#1A0F172A"
-                                                BorderBrush="#24FFFFFF"
-                                                BorderThickness="1">
-                                            <Grid>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="*" />
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="Auto" />
-                                                </Grid.RowDefinitions>
+                                <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                                    <ui:Button DockPanel.Dock="Right"
+                                               Content="{DynamicResource Ch_AddChannel}"
+                                               Command="{Binding ToggleNewChannelCreatorCommand}"
+                                               Appearance="Primary"
+                                               Padding="12,5" />
+                                    <StackPanel>
+                                        <TextBlock Text="{DynamicResource Mixer_SectionTitle}" FontSize="15" FontWeight="SemiBold" />
+                                        <TextBlock Text="{DynamicResource Mixer_SectionSubtitle}" FontSize="11" Foreground="#94A3B8" />
+                                    </StackPanel>
+                                </DockPanel>
 
-                                                <Border Grid.Row="0"
-                                                        Height="3"
-                                                        CornerRadius="2"
-                                                        Margin="0,0,0,8"
-                                                        Background="{Binding AccentHex, Converter={StaticResource HexToBrushConverter}}" />
+                                <!-- Inline New Channel Creator -->
+                                <Border Grid.Row="1"
+                                        Margin="0,0,0,10"
+                                        Padding="10,8"
+                                        CornerRadius="8"
+                                        Background="#220F172A"
+                                        BorderBrush="#4438BDF8"
+                                        BorderThickness="1"
+                                        Visibility="{Binding IsNewChannelCreatorOpen, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{DynamicResource Ch_NewNameLabel}" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="12" />
+                                        <TextBox Width="150" Text="{Binding NewChannelName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0" />
+                                        <ComboBox Width="150" SelectedIndex="{Binding NewChannelSourceIndex, Mode=TwoWay}" Margin="0,0,10,0">
+                                            <ComboBoxItem Content="{DynamicResource Ch_SourceAppGroup}" />
+                                            <ComboBoxItem Content="{DynamicResource Ch_SourceMic}" />
+                                            <ComboBoxItem Content="{DynamicResource Ch_SourceLoopback}" />
+                                        </ComboBox>
+                                        <ui:Button Content="{DynamicResource Ch_CreateBtn}" Command="{Binding CreateNewChannelCommand}" Appearance="Primary" Margin="0,0,6,0" />
+                                        <ui:Button Content="{DynamicResource Ch_CancelBtn}" Command="{Binding ToggleNewChannelCreatorCommand}" Appearance="Secondary" />
+                                    </StackPanel>
+                                </Border>
 
-                                                <TextBlock Grid.Row="1"
-                                                           HorizontalAlignment="Center"
-                                                           FontSize="13"
-                                                           FontWeight="SemiBold"
-                                                           Margin="0,0,0,10"
-                                                           TextTrimming="CharacterEllipsis">
-                                                    <TextBlock.Text>
-                                                        <MultiBinding Converter="{StaticResource LocKeyConverter}">
-                                                            <Binding Path="NameKey" />
-                                                            <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
-                                                        </MultiBinding>
-                                                    </TextBlock.Text>
-                                                </TextBlock>
+                                <!-- Horizontal Scrollable Dynamic Channel Strips -->
+                                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding DynamicChannels}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Width="162"
+                                                        Margin="0,0,8,0"
+                                                        Padding="10,10"
+                                                        CornerRadius="10"
+                                                        Background="#1A0F172A"
+                                                        BorderBrush="#24FFFFFF"
+                                                        BorderThickness="1"
+                                                        AllowDrop="True"
+                                                        DragOver="OnDynamicChannelDragOver"
+                                                        Drop="OnDynamicChannelDrop">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="*" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
 
-                                                <Grid Grid.Row="2" Margin="0,0,0,10">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="28" />
-                                                    </Grid.ColumnDefinitions>
+                                                        <Border Grid.Row="0"
+                                                                Height="3"
+                                                                CornerRadius="2"
+                                                                Margin="0,0,0,6"
+                                                                Background="{Binding Color, Converter={StaticResource HexToBrushConverter}}" />
 
-                                                    <Slider Grid.Column="0"
-                                                            Orientation="Vertical"
-                                                            Minimum="0"
-                                                            Maximum="1.25"
-                                                            Value="{Binding Volume, Mode=TwoWay}"
-                                                            HorizontalAlignment="Center"
-                                                            VerticalAlignment="Stretch"
-                                                            TickFrequency="0.25"
-                                                            IsMoveToPointEnabled="True" />
+                                                        <DockPanel Grid.Row="1" Margin="0,0,0,6">
+                                                            <Button DockPanel.Dock="Right"
+                                                                    Content="×"
+                                                                    Command="{Binding DataContext.DeleteChannelCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    ToolTip="{DynamicResource Ch_DeleteTooltip}"
+                                                                    Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                    Padding="4,0"
+                                                                    FontSize="12"
+                                                                    Background="Transparent"
+                                                                    BorderThickness="0" />
+                                                            <TextBlock Text="{Binding Name}"
+                                                                       FontSize="13"
+                                                                       FontWeight="SemiBold"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       VerticalAlignment="Center" />
+                                                        </DockPanel>
 
-                                                    <controls:VuMeterControl Grid.Column="1"
-                                                                             PeakLeft="{Binding PeakLeft}"
-                                                                             PeakRight="{Binding PeakRight}"
-                                                                             RmsLeft="{Binding RmsLeft}"
-                                                                             RmsRight="{Binding RmsRight}"
-                                                                             IsMuted="{Binding IsMuted}"
-                                                                             IsClipping="{Binding IsClipping}" />
-                                                </Grid>
+                                                        <!-- Inline Hardware Input Picker (Mic strips) -->
+                                                        <ComboBox Grid.Row="2"
+                                                                  ItemsSource="{Binding DataContext.InputDevices, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                  SelectedValue="{Binding DeviceId, Mode=TwoWay}"
+                                                                  SelectedValuePath="Id"
+                                                                  DisplayMemberPath="Name"
+                                                                  Visibility="{Binding IsHardwareInput, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                  Margin="0,0,0,6"
+                                                                  FontSize="11" />
 
-                                                <TextBlock Grid.Row="3"
-                                                           Text="{Binding VolumeDbText}"
-                                                           HorizontalAlignment="Center"
-                                                           FontFamily="Consolas"
-                                                           FontSize="11"
-                                                           Foreground="#CBD5E1"
-                                                           Margin="0,0,0,8" />
+                                                        <!-- Bound App Chips -->
+                                                        <ItemsControl Grid.Row="3" ItemsSource="{Binding BoundApps}" Margin="0,0,0,6">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Margin="0,0,4,4" Padding="5,2" CornerRadius="4" Background="#2638BDF8">
+                                                                        <TextBlock Text="{Binding}" FontSize="10" Foreground="#BAE6FD" />
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
 
-                                                <UniformGrid Grid.Row="4" Rows="1" Columns="2">
-                                                    <ToggleButton Content="{DynamicResource Channel_MuteShort}"
-                                                                  IsChecked="{Binding IsMuted, Mode=TwoWay}"
-                                                                  ToolTip="{DynamicResource Channel_MuteTooltip}"
-                                                                  Margin="0,0,3,0"
-                                                                  Height="30"
-                                                                  FontWeight="Bold" />
-                                                    <ToggleButton Content="{DynamicResource Channel_SoloShort}"
-                                                                  IsChecked="{Binding IsSolo, Mode=TwoWay}"
-                                                                  ToolTip="{DynamicResource Channel_SoloTooltip}"
-                                                                  Margin="3,0,0,0"
-                                                                  Height="30"
-                                                                  FontWeight="Bold" />
-                                                </UniformGrid>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                                        <!-- Vertical Fader + 60fps SkiaSharp VU Meter -->
+                                                        <Grid Grid.Row="4" Margin="0,0,0,6">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="26" />
+                                                            </Grid.ColumnDefinitions>
 
-                            <!-- Mic Gain Reduction Telemetry Bar -->
-                            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="4,12,4,0">
-                                <TextBlock Text="{DynamicResource Channel_GrLabel}"
-                                           FontSize="11"
-                                           FontWeight="Bold"
-                                           Foreground="#F59E0B"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0" />
-                                <ProgressBar Width="220"
-                                             Height="8"
-                                             Minimum="0"
-                                             Maximum="1"
-                                             Value="{Binding MicGainReductionNormalized}"
-                                             Foreground="#F59E0B"
-                                             VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                                                            <Slider Grid.Column="0"
+                                                                    Orientation="Vertical"
+                                                                    Minimum="0"
+                                                                    Maximum="1.25"
+                                                                    Value="{Binding Volume, Mode=TwoWay}"
+                                                                    HorizontalAlignment="Center"
+                                                                    VerticalAlignment="Stretch"
+                                                                    IsMoveToPointEnabled="True" />
+
+                                                            <controls:VuMeterControl Grid.Column="1"
+                                                                                     PeakLeft="{Binding PeakLeft}"
+                                                                                     PeakRight="{Binding PeakRight}"
+                                                                                     RmsLeft="{Binding RmsLeft}"
+                                                                                     RmsRight="{Binding RmsRight}"
+                                                                                     IsMuted="{Binding Muted}"
+                                                                                     IsClipping="{Binding IsClipping}" />
+                                                        </Grid>
+
+                                                        <TextBlock Grid.Row="5"
+                                                                   Text="{Binding VolumeDbText}"
+                                                                   HorizontalAlignment="Center"
+                                                                   FontFamily="Consolas"
+                                                                   FontSize="11"
+                                                                   Foreground="#CBD5E1"
+                                                                   Margin="0,0,0,6" />
+
+                                                        <!-- M / S -->
+                                                        <UniformGrid Grid.Row="6" Rows="1" Columns="2" Margin="0,0,0,6">
+                                                            <ToggleButton Content="{DynamicResource Channel_MuteShort}"
+                                                                          IsChecked="{Binding Muted, Mode=TwoWay}"
+                                                                          ToolTip="{DynamicResource Channel_MuteTooltip}"
+                                                                          Margin="0,0,3,0"
+                                                                          Height="26"
+                                                                          FontWeight="Bold" />
+                                                            <ToggleButton Content="{DynamicResource Channel_SoloShort}"
+                                                                          IsChecked="{Binding Solo, Mode=TwoWay}"
+                                                                          ToolTip="{DynamicResource Channel_SoloTooltip}"
+                                                                          Margin="3,0,0,0"
+                                                                          Height="26"
+                                                                          FontWeight="Bold" />
+                                                        </UniformGrid>
+
+                                                        <!-- A1 A2 B1 B2 Bus Send Pills -->
+                                                        <UniformGrid Grid.Row="7" Rows="2" Columns="2">
+                                                            <ToggleButton Content="{DynamicResource Ch_SendA1}"
+                                                                          IsChecked="{Binding SendA1, Mode=TwoWay}"
+                                                                          IsEnabled="{Binding EchoLockedA1A2, Converter={StaticResource InverseBoolConverter}}"
+                                                                          ToolTip="{DynamicResource Ch_EchoLockTooltip}"
+                                                                          Margin="0,0,2,2"
+                                                                          Height="22"
+                                                                          FontSize="10"
+                                                                          FontWeight="Bold" />
+                                                            <ToggleButton Content="{DynamicResource Ch_SendA2}"
+                                                                          IsChecked="{Binding SendA2, Mode=TwoWay}"
+                                                                          IsEnabled="{Binding EchoLockedA1A2, Converter={StaticResource InverseBoolConverter}}"
+                                                                          ToolTip="{DynamicResource Ch_EchoLockTooltip}"
+                                                                          Margin="2,0,0,2"
+                                                                          Height="22"
+                                                                          FontSize="10"
+                                                                          FontWeight="Bold" />
+                                                            <ToggleButton Content="{DynamicResource Ch_SendB1}"
+                                                                          IsChecked="{Binding SendB1, Mode=TwoWay}"
+                                                                          Margin="0,2,2,0"
+                                                                          Height="22"
+                                                                          FontSize="10"
+                                                                          FontWeight="Bold" />
+                                                            <ToggleButton Content="{DynamicResource Ch_SendB2}"
+                                                                          IsChecked="{Binding SendB2, Mode=TwoWay}"
+                                                                          Margin="2,2,0,0"
+                                                                          Height="22"
+                                                                          FontSize="10"
+                                                                          FontWeight="Bold" />
+                                                        </UniformGrid>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <!-- Mic Gain Reduction Bar -->
+                                <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+                                    <TextBlock Text="{DynamicResource Channel_GrLabel}" FontSize="11" FontWeight="Bold" Foreground="#F59E0B" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <ProgressBar Width="200" Height="7" Minimum="0" Maximum="1" Value="{Binding MicGainReductionNormalized}" Foreground="#F59E0B" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Master Output Buses (A1 / A2 / B1 / B2) -->
+                        <Border Grid.Column="2"
+                                Padding="14"
+                                CornerRadius="12"
+                                Background="#14FFFFFF"
+                                BorderBrush="#22FFFFFF"
+                                BorderThickness="1">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                                    <ui:Button DockPanel.Dock="Right"
+                                               Content="{DynamicResource Io_RefreshDevices}"
+                                               Command="{Binding RefreshDevicesCommand}"
+                                               Appearance="Secondary"
+                                               Padding="10,4" />
+                                    <TextBlock Text="{DynamicResource Bus_SectionTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </DockPanel>
+
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding OutputBuses}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,8"
+                                                        Padding="10"
+                                                        CornerRadius="10"
+                                                        Background="#1A0F172A"
+                                                        BorderBrush="#22FFFFFF"
+                                                        BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="22" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                            <DockPanel>
+                                                                <ToggleButton DockPanel.Dock="Right"
+                                                                              Content="{DynamicResource Channel_MuteShort}"
+                                                                              IsChecked="{Binding Muted, Mode=TwoWay}"
+                                                                              Width="26"
+                                                                              Height="24"
+                                                                              FontWeight="Bold" />
+                                                                <TextBlock FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center">
+                                                                    <TextBlock.Text>
+                                                                        <MultiBinding Converter="{StaticResource LocKeyConverter}">
+                                                                            <Binding Path="RoleNameKey" />
+                                                                            <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
+                                                                        </MultiBinding>
+                                                                    </TextBlock.Text>
+                                                                </TextBlock>
+                                                            </DockPanel>
+                                                            <TextBlock FontSize="10" Foreground="#94A3B8" Margin="0,1,0,6">
+                                                                <TextBlock.Text>
+                                                                    <MultiBinding Converter="{StaticResource LocKeyConverter}">
+                                                                        <Binding Path="RoleDescKey" />
+                                                                        <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
+                                                                    </MultiBinding>
+                                                                </TextBlock.Text>
+                                                            </TextBlock>
+                                                            <ComboBox ItemsSource="{Binding DataContext.OutputDevices, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                      SelectedValue="{Binding DeviceId, Mode=TwoWay}"
+                                                                      SelectedValuePath="Id"
+                                                                      ItemTemplate="{StaticResource DeviceComboItemTemplate}"
+                                                                      Margin="0,0,0,6" />
+                                                            <DockPanel>
+                                                                <TextBlock DockPanel.Dock="Right" Text="{Binding VolumeDbText}" FontFamily="Consolas" FontSize="10" Foreground="#CBD5E1" Width="52" TextAlignment="Right" VerticalAlignment="Center" />
+                                                                <Slider Minimum="0" Maximum="1.25" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
+                                                            </DockPanel>
+                                                        </StackPanel>
+
+                                                        <controls:VuMeterControl Grid.Column="1"
+                                                                                 PeakLeft="{Binding PeakLeft}"
+                                                                                 PeakRight="{Binding PeakRight}"
+                                                                                 RmsLeft="{Binding RmsLeft}"
+                                                                                 RmsRight="{Binding RmsRight}"
+                                                                                 IsMuted="{Binding Muted}"
+                                                                                 IsClipping="{Binding IsClipping}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </Grid>
                 </Grid>
             </TabItem>
 

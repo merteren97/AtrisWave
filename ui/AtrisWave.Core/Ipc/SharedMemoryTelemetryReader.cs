@@ -1,15 +1,16 @@
 using System.IO.MemoryMappedFiles;
-using System.Runtime.InteropServices;
 
 namespace AtrisWave.Core.Ipc;
 
 /// <summary>
-/// Seqlock-safe reader for the engine's shared-memory telemetry block (<c>Local\AtrisWaveTelemetryV1</c>).
+/// Seqlock-safe reader for the engine's Telemetry V2 shared-memory block (<c>Local\AtrisWaveTelemetryV2</c>, 704 bytes).
 /// Handles offline state gracefully when the native engine is not running.
 /// </summary>
 public sealed class SharedMemoryTelemetryReader : IDisposable
 {
     private const int SequenceFieldOffset = 24;
+    private const int BusesBaseOffset = TelemetryConstants.HeaderSizeBytes +
+                                        (TelemetryConstants.MaxChannels * TelemetryConstants.ChannelFrameSizeBytes);
     private const int MaxSeqlockRetries = 8;
 
     private readonly string _mapName;
@@ -27,27 +28,30 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
         _mapName = mapName;
     }
 
-    /// <summary>
-    /// Attempts to read a consistent telemetry snapshot using seqlock validation.
-    /// Returns <c>false</c> when the engine is offline, the header is invalid, or a torn write is detected.
-    /// </summary>
     public bool TryRead(out TelemetrySnapshot? snapshot)
     {
-        var frames = new ChannelMeterFrame[TelemetryConstants.MaxChannels];
-        if (!TryRead(out TelemetryHeader header, frames))
+        var channels = new ChannelMeterFrame[TelemetryConstants.MaxChannels];
+        var buses = new ChannelMeterFrame[TelemetryConstants.MaxBuses];
+        if (!TryRead(out TelemetryHeader header, channels, buses))
         {
             snapshot = null;
             return false;
         }
 
-        snapshot = new TelemetrySnapshot(header, frames);
+        snapshot = new TelemetrySnapshot(header, channels, buses);
         return true;
     }
 
-    /// <summary>
-    /// Zero-allocation overload that writes channel meter frames into a caller-provided buffer.
-    /// </summary>
     public bool TryRead(out TelemetryHeader header, Span<ChannelMeterFrame> channels)
+    {
+        Span<ChannelMeterFrame> dummyBuses = stackalloc ChannelMeterFrame[TelemetryConstants.MaxBuses];
+        return TryRead(out header, channels, dummyBuses);
+    }
+
+    /// <summary>
+    /// Zero-allocation Telemetry V2 overload reading up to 16 channels and 4 output buses.
+    /// </summary>
+    public bool TryRead(out TelemetryHeader header, Span<ChannelMeterFrame> channels, Span<ChannelMeterFrame> buses)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         header = default;
@@ -55,6 +59,11 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
         if (channels.Length < TelemetryConstants.MaxChannels)
         {
             throw new ArgumentException($"Channel buffer must be at least {TelemetryConstants.MaxChannels} elements.", nameof(channels));
+        }
+
+        if (buses.Length < TelemetryConstants.MaxBuses)
+        {
+            throw new ArgumentException($"Bus buffer must be at least {TelemetryConstants.MaxBuses} elements.", nameof(buses));
         }
 
         if (!EnsureConnected())
@@ -85,11 +94,16 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
                     return false;
                 }
 
-                int channelCount = (int)Math.Min(header.ChannelCount, TelemetryConstants.MaxChannels);
-                for (int i = 0; i < channelCount; i++)
+                for (int i = 0; i < TelemetryConstants.MaxChannels; i++)
                 {
                     int offset = TelemetryConstants.HeaderSizeBytes + (i * TelemetryConstants.ChannelFrameSizeBytes);
                     accessor.Read(offset, out channels[i]);
+                }
+
+                for (int i = 0; i < TelemetryConstants.MaxBuses; i++)
+                {
+                    int offset = BusesBaseOffset + (i * TelemetryConstants.ChannelFrameSizeBytes);
+                    accessor.Read(offset, out buses[i]);
                 }
 
                 Thread.MemoryBarrier();

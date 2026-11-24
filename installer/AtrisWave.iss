@@ -11,6 +11,7 @@
 #define MyAppURL "https://github.com/atriswave/AtrisWave"
 #define MyAppExeName "AtrisWave.UI.exe"
 #define MyEngineExeName "AtrisWaveEngine.exe"
+#define MyWatchdogExeName "AtrisWaveWatchdog.exe"
 #define MyPluginHostExeName "AtrisWavePluginHost.exe"
 #define StagingDir "..\dist\AtrisWave-win-x64"
 
@@ -73,4 +74,5 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; Gracefully stop engine, plugin host, and UI before file removal
 Filename: "taskkill.exe"; Parameters: "/IM {#MyAppExeName} /F"; Flags: runhidden; RunOnceId: "KillAtrisWaveUI"
 Filename: "taskkill.exe"; Parameters: "/IM {#MyPluginHostExeName} /F"; Flags: runhidden; RunOnceId: "KillAtrisWavePluginHost"
+Filename: "taskkill.exe"; Parameters: "/IM {#MyWatchdogExeName} /F"; Flags: runhidden; RunOnceId: "KillAtrisWaveWatchdog"
 Filename: "taskkill.exe"; Parameters: "/IM {#MyEngineExeName} /F"; Flags: runhidden; RunOnceId: "KillAtrisWaveEngine"

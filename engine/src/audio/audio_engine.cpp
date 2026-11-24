@@ -1,6 +1,7 @@
 #include <atriswave/audio/audio_engine.hpp>
 #include <atriswave/audio/config_store.hpp>
 #include <atriswave/ipc_protocol.h>
+#include <atriswave/rt_safety.hpp>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -149,41 +150,115 @@ AudioEngine::~AudioEngine() {
     stop();
 }
 
+void AudioEngine::init_default_slots() {
+    for (size_t i = 0; i < dsp::kDynamicMaxChannels; ++i) {
+        channels_[i].occupied = false;
+        channels_[i].stream_active.store(false, std::memory_order_relaxed);
+        channels_[i].info = DynamicChannelInfo{};
+        channels_[i].info.channel_id = static_cast<uint32_t>(i);
+        channels_[i].pair_group.clear();
+        channels_[i].pll_l.reset();
+        channels_[i].pll_r.reset();
+        dynamic_mixer_.set_channel_active(i, false);
+    }
+
+    // Slot 0: System (All Apps)
+    {
+        auto& sys = channels_[0];
+        sys.occupied = true;
+        sys.info.channel_id = 0;
+        sys.info.name = "System";
+        sys.info.source_type = "app_group";
+        sys.info.color = "#6366F1";
+        sys.info.is_system = true;
+        sys.info.send_a1 = true;
+        dynamic_mixer_.set_channel_active(0, true);
+        dynamic_mixer_.set_channel_mix(0, 1.0f, false, false, 0.0f);
+        dynamic_mixer_.set_channel_send(0, 0, true, 1.0f);
+    }
+
+    // Slot 1: Microphone (Hardware Input)
+    {
+        auto& mic = channels_[1];
+        mic.occupied = true;
+        mic.info.channel_id = 1;
+        mic.info.name = "Microphone";
+        mic.info.source_type = "hardware_input";
+        mic.info.color = "#10B981";
+        mic.info.is_system = false;
+        mic.info.send_b1 = true;
+        mic.info.send_b2 = true;
+        dynamic_mixer_.set_channel_active(1, true);
+        dynamic_mixer_.set_channel_mix(1, 1.0f, false, false, 0.0f);
+        dynamic_mixer_.set_channel_send(1, 2, true, 1.0f);
+        dynamic_mixer_.set_channel_send(1, 3, true, 1.0f);
+    }
+
+    // 4 Output Buses: A1, A2, B1, B2
+    const char* bus_ids[4] = {"A1", "A2", "B1", "B2"};
+    const char* bus_names[4] = {"Headphones", "Speakers", "Mic Out", "Stream Mix"};
+    for (size_t b = 0; b < dsp::kDynamicMaxBuses; ++b) {
+        buses_[b].info = OutputBusInfo{};
+        buses_[b].info.bus_id = bus_ids[b];
+        buses_[b].info.role = bus_ids[b];
+        buses_[b].info.name = bus_names[b];
+        buses_[b].pair_group.clear();
+        buses_[b].stream_active.store(false, std::memory_order_relaxed);
+        buses_[b].pll_l.reset();
+        buses_[b].pll_r.reset();
+        dynamic_mixer_.set_bus_mix(b, 1.0f, false);
+    }
+}
+
 bool AudioEngine::start(void* shutdown_event, bool headless_test) {
     stop();
     shutdown_event_ = shutdown_event;
 
-    // Pre-allocate all RT scratch buffers before starting any audio thread
-    mono_in_scratch_.assign(kMaxScratchFrames, 0.0f);
-    mon_l_scratch_.assign(kMaxScratchFrames, 0.0f);
-    mon_r_scratch_.assign(kMaxScratchFrames, 0.0f);
-    bcast_l_scratch_.assign(kMaxScratchFrames, 0.0f);
-    bcast_r_scratch_.assign(kMaxScratchFrames, 0.0f);
-    loop_l_scratch_.assign(kMaxScratchFrames, 0.0f);
-    loop_r_scratch_.assign(kMaxScratchFrames, 0.0f);
-    mix_l_scratch_.assign(kMaxScratchFrames, 0.0f);
-    mix_r_scratch_.assign(kMaxScratchFrames, 0.0f);
+    if (!headless_test) {
+        (void)failsafe_.restore_if_needed();
+    }
 
-    mic_pipeline_.prepare(48000.0, kMaxScratchFrames);
-    mixer_bus_.prepare(48000.0);
+    for (size_t ch = 0; ch < dsp::kDynamicMaxChannels; ++ch) {
+        ch_in_l_[ch].assign(kMasterTickFrames, 0.0f);
+        ch_in_r_[ch].assign(kMasterTickFrames, 0.0f);
+    }
+    mic_mono_scratch_.assign(kMasterTickFrames, 0.0f);
+    mic_mon_l_.assign(kMasterTickFrames, 0.0f);
+    mic_mon_r_.assign(kMasterTickFrames, 0.0f);
+    mic_bcast_l_.assign(kMasterTickFrames, 0.0f);
+    mic_bcast_r_.assign(kMasterTickFrames, 0.0f);
+    for (size_t b = 0; b < dsp::kDynamicMaxBuses; ++b) {
+        bus_out_l_[b].assign(kMasterTickFrames, 0.0f);
+        bus_out_r_[b].assign(kMasterTickFrames, 0.0f);
+    }
+
+    mic_pipeline_.prepare(48000.0, kMasterTickFrames);
+    dynamic_mixer_.prepare(48000.0);
     mic_pipeline_.set_params(to_dsp_params(current_mic_cfg_));
 
+    {
+        std::lock_guard lock(state_mutex_);
+        init_default_slots();
+    }
+
     if (!telemetry_.open(ATRISWAVE_TELEMETRY_SHM_NAME_W)) {
+        return false;
+    }
+
+    master_stop_event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (master_stop_event_ == nullptr) {
+        telemetry_.close();
         return false;
     }
 
     engine_state_.store(ATRISWAVE_ENGINE_STATE_RUNNING, std::memory_order_release);
 
     if (!headless_test) {
-        // Attempt to open default capture device gracefully; stay running if unavailable.
-        const auto devices = audio::WasapiDeviceEnumerator::enumerate_devices();
-        for (const auto& d : devices) {
-            if (d.is_capture && d.is_default) {
-                (void)select_devices(d.id, "", "");
-                break;
-            }
-        }
+        (void)auto_setup_defaults();
     }
+
+    master_running_.store(true, std::memory_order_release);
+    master_thread_ = std::thread(&AudioEngine::master_clock_loop, this);
 
     if (!control_server_.start(ATRISWAVE_PIPE_NAME_W, this)) {
         stop();
@@ -195,20 +270,158 @@ bool AudioEngine::start(void* shutdown_event, bool headless_test) {
 
 void AudioEngine::stop() {
     engine_state_.store(ATRISWAVE_ENGINE_STATE_STOPPED, std::memory_order_release);
-    monitor_active_.store(false, std::memory_order_release);
-    output_active_.store(false, std::memory_order_release);
-    loopback_active_.store(false, std::memory_order_release);
-    {
-        std::lock_guard lock(device_mutex_);
-        loopback_capture_.stop();
-        capture_stream_.close();
-        monitor_stream_.close();
-        output_stream_.close();
-    }
-    publish_telemetry_tick();
     control_server_.stop();
+
+    master_running_.store(false, std::memory_order_release);
+    if (master_stop_event_ != nullptr) {
+        SetEvent(static_cast<HANDLE>(master_stop_event_));
+    }
+    if (master_thread_.joinable()) {
+        master_thread_.join();
+    }
+    if (master_stop_event_ != nullptr) {
+        CloseHandle(static_cast<HANDLE>(master_stop_event_));
+        master_stop_event_ = nullptr;
+    }
+
+    {
+        std::lock_guard lock(state_mutex_);
+        for (auto& ch : channels_) {
+            ch.stream_active.store(false, std::memory_order_release);
+            ch.loopback_capture.stop();
+            ch.capture_stream.close();
+        }
+        for (auto& bus : buses_) {
+            bus.stream_active.store(false, std::memory_order_release);
+            bus.render_stream.close();
+        }
+    }
+
+    publish_telemetry_tick();
     telemetry_.close();
+    (void)failsafe_.disarm();
     shutdown_event_ = nullptr;
+}
+
+void AudioEngine::master_clock_loop() {
+    MmcssGuard mmcss(L"Pro Audio");
+    DenormalGuard denormal;
+
+    HANDLE timer = CreateWaitableTimerExW(
+        nullptr,
+        nullptr,
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_ALL_ACCESS);
+    if (timer == nullptr) {
+        timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+    }
+
+    if (timer != nullptr) {
+        LARGE_INTEGER due{};
+        due.QuadPart = -100000LL; // 10ms
+        SetWaitableTimer(timer, &due, 10, nullptr, nullptr, FALSE);
+    }
+
+    HANDLE handles[2] = {
+        static_cast<HANDLE>(master_stop_event_),
+        timer
+    };
+
+    while (master_running_.load(std::memory_order_acquire)) {
+        if (timer != nullptr) {
+            const DWORD res = WaitForMultipleObjects(2, handles, FALSE, 100);
+            if (res == WAIT_OBJECT_0) {
+                break;
+            }
+        } else {
+            if (WaitForSingleObject(static_cast<HANDLE>(master_stop_event_), 10) == WAIT_OBJECT_0) {
+                break;
+            }
+        }
+        process_master_tick(kMasterTickFrames);
+    }
+
+    if (timer != nullptr) {
+        CancelWaitableTimer(timer);
+        CloseHandle(timer);
+    }
+}
+
+void AudioEngine::process_master_tick(size_t frames) noexcept {
+    std::array<const float*, dsp::kDynamicMaxChannels> in_l{};
+    std::array<const float*, dsp::kDynamicMaxChannels> in_r{};
+
+    for (size_t ch = 0; ch < dsp::kDynamicMaxChannels; ++ch) {
+        if (!channels_[ch].stream_active.load(std::memory_order_acquire)) {
+            continue;
+        }
+        auto& ring = channels_[ch].input_ring;
+        const size_t avail = ring.available_read();
+        const float fill_ratio = static_cast<float>(avail) / static_cast<float>(ring.capacity());
+        channels_[ch].pll_l.update_pll(fill_ratio, 0.25f);
+        channels_[ch].pll_r.update_pll(fill_ratio, 0.25f);
+
+        for (size_t i = 0; i < frames; ++i) {
+            StereoFrame f{};
+            if (!ring.try_pop(f)) {
+                f = StereoFrame{};
+            }
+            ch_in_l_[ch][i] = f.l;
+            ch_in_r_[ch][i] = f.r;
+        }
+
+        if (ch == 1) {
+            for (size_t i = 0; i < frames; ++i) {
+                mic_mono_scratch_[i] = ch_in_l_[1][i];
+            }
+            mic_pipeline_.process(
+                mic_mono_scratch_.data(),
+                mic_mon_l_.data(),
+                mic_mon_r_.data(),
+                mic_bcast_l_.data(),
+                mic_bcast_r_.data(),
+                frames);
+            in_l[1] = mic_bcast_l_.data();
+            in_r[1] = mic_bcast_r_.data();
+        } else {
+            in_l[ch] = ch_in_l_[ch].data();
+            in_r[ch] = ch_in_r_[ch].data();
+        }
+    }
+
+    std::array<float*, dsp::kDynamicMaxBuses> out_l{};
+    std::array<float*, dsp::kDynamicMaxBuses> out_r{};
+    for (size_t b = 0; b < dsp::kDynamicMaxBuses; ++b) {
+        out_l[b] = bus_out_l_[b].data();
+        out_r[b] = bus_out_r_[b].data();
+    }
+
+    dynamic_mixer_.process(in_l, in_r, out_l, out_r, frames);
+
+    // Sum low-latency Direct Monitor Sidetone into Bus A1 (Headphones) when Mic stream is active
+    if (channels_[1].stream_active.load(std::memory_order_acquire)) {
+        for (size_t i = 0; i < frames; ++i) {
+            bus_out_l_[0][i] = std::clamp(bus_out_l_[0][i] + mic_mon_l_[i], -0.95f, 0.95f);
+            bus_out_r_[0][i] = std::clamp(bus_out_r_[0][i] + mic_mon_r_[i], -0.95f, 0.95f);
+        }
+    }
+
+    for (size_t b = 0; b < dsp::kDynamicMaxBuses; ++b) {
+        if (!buses_[b].stream_active.load(std::memory_order_acquire)) {
+            continue;
+        }
+        auto& ring = buses_[b].output_ring;
+        const float fill_ratio = static_cast<float>(ring.available_read()) / static_cast<float>(ring.capacity());
+        buses_[b].pll_l.update_pll(fill_ratio, 0.25f);
+        buses_[b].pll_r.update_pll(fill_ratio, 0.25f);
+
+        for (size_t i = 0; i < frames; ++i) {
+            if (!ring.try_push(StereoFrame{bus_out_l_[b][i], bus_out_r_[b][i]})) {
+                xrun_count_.fetch_add(1, std::memory_order_relaxed);
+                break;
+            }
+        }
+    }
 }
 
 void AudioEngine::publish_telemetry_tick() noexcept {
@@ -217,18 +430,57 @@ void AudioEngine::publish_telemetry_tick() noexcept {
     }
 
     TelemetrySnapshot snap{};
-    snap.header.channel_count = static_cast<uint32_t>(dsp::kMixerChannelCount);
+    snap.header.version = ATRISWAVE_TELEMETRY_VERSION;
     snap.header.sample_rate = sample_rate_.load(std::memory_order_relaxed);
     snap.header.buffer_frames = buffer_frames_.load(std::memory_order_relaxed);
     snap.header.engine_state = engine_state_.load(std::memory_order_acquire);
     snap.header.timestamp_qpc = TelemetryPublisher::query_qpc();
     snap.header.xrun_count = xrun_count_.load(std::memory_order_relaxed);
+    snap.header.bus_count = ATRISWAVE_MAX_BUSES;
 
-    mixer_bus_.fill_telemetry(snap.channels, dsp::kMixerChannelCount);
-    snap.channels[static_cast<size_t>(dsp::ChannelId::Mic)].gain_reduction_db =
-        mic_pipeline_.gain_reduction_db();
+    uint32_t active_ch = 0;
+    dynamic_mixer_.fill_telemetry(snap.channels, active_ch, snap.buses);
+    snap.header.channel_count = active_ch;
+    snap.channels[1].gain_reduction_db = mic_pipeline_.gain_reduction_db();
 
     telemetry_.publish(snap);
+}
+
+int AudioEngine::bus_index_from_id(const std::string& bus_id) noexcept {
+    if (bus_id == "A1" || bus_id == "a1") return 0;
+    if (bus_id == "A2" || bus_id == "a2") return 1;
+    if (bus_id == "B1" || bus_id == "b1") return 2;
+    if (bus_id == "B2" || bus_id == "b2") return 3;
+    return -1;
+}
+
+std::string AudioEngine::resolve_pair_group(const std::string& device_id) const {
+    if (device_id.empty()) {
+        return {};
+    }
+    const auto devices = audio::WasapiDeviceEnumerator::enumerate_devices();
+    for (const auto& d : devices) {
+        if (d.id == device_id) {
+            return d.virtual_pair_group;
+        }
+    }
+    return {};
+}
+
+bool AudioEngine::would_create_feedback_loop_locked(
+    uint32_t /*ch_idx*/,
+    const std::string& ch_device_id,
+    const std::string& ch_pair_group,
+    size_t /*bus_idx*/,
+    const std::string& bus_device_id,
+    const std::string& bus_pair_group) const {
+    if (!ch_device_id.empty() && !bus_device_id.empty() && ch_device_id == bus_device_id) {
+        return true;
+    }
+    if (!ch_pair_group.empty() && !bus_pair_group.empty() && ch_pair_group == bus_pair_group) {
+        return true;
+    }
+    return false;
 }
 
 ControlServer::StatusSnapshot AudioEngine::get_status() {
@@ -236,7 +488,12 @@ ControlServer::StatusSnapshot AudioEngine::get_status() {
     s.engine_state = engine_state_.load(std::memory_order_acquire);
     s.sample_rate = sample_rate_.load(std::memory_order_relaxed);
     s.buffer_frames = buffer_frames_.load(std::memory_order_relaxed);
-    s.channel_count = static_cast<uint32_t>(dsp::kMixerChannelCount);
+    std::lock_guard lock(state_mutex_);
+    uint32_t count = 0;
+    for (const auto& ch : channels_) {
+        if (ch.occupied) ++count;
+    }
+    s.channel_count = count;
     return s;
 }
 
@@ -255,10 +512,24 @@ std::vector<audio::AudioSessionInfo> AudioEngine::list_sessions() {
 }
 
 bool AudioEngine::set_channel(const ChannelConfig& cfg) {
-    if (cfg.channel_id >= dsp::kMixerChannelCount) {
+    if (cfg.channel_id >= dsp::kDynamicMaxChannels) {
         return false;
     }
-    mixer_bus_.set_channel(static_cast<dsp::ChannelId>(cfg.channel_id), cfg.volume, cfg.muted, cfg.solo);
+    std::lock_guard lock(state_mutex_);
+    if (!channels_[cfg.channel_id].occupied) {
+        return false;
+    }
+    channels_[cfg.channel_id].info.volume = cfg.volume;
+    channels_[cfg.channel_id].info.muted = cfg.muted;
+    channels_[cfg.channel_id].info.solo = cfg.solo;
+    dynamic_mixer_.set_channel_mix(
+        cfg.channel_id, cfg.volume, cfg.muted, cfg.solo, channels_[cfg.channel_id].info.pan);
+
+    if (channels_[cfg.channel_id].info.source_type == "app_group") {
+        for (const auto& proc : channels_[cfg.channel_id].info.bound_apps) {
+            (void)audio::AppRouter::set_app_session_volume_mute(proc, cfg.volume, cfg.muted);
+        }
+    }
     return true;
 }
 
@@ -268,82 +539,59 @@ bool AudioEngine::set_mic_dsp(const MicDspConfig& cfg) {
         current_mic_cfg_ = cfg;
     }
     mic_pipeline_.set_params(to_dsp_params(cfg));
-    mixer_bus_.set_ducking(cfg.ducking_enabled, cfg.ducking_depth_db);
     return true;
 }
 
 bool AudioEngine::select_devices(const std::string& input_id,
                                  const std::string& monitor_id,
                                  const std::string& output_id) {
-    std::lock_guard lock(device_mutex_);
-    monitor_active_.store(false, std::memory_order_release);
-    output_active_.store(false, std::memory_order_release);
-    capture_stream_.close();
-    monitor_stream_.close();
-    output_stream_.close();
-    monitor_ring_.reset();
-    output_ring_.reset();
-
-    bool any_ok = false;
-
+    bool ok = true;
     if (!input_id.empty()) {
-        if (capture_stream_.open(input_id, audio::StreamDirection::Capture)) {
-            sample_rate_.store(capture_stream_.sample_rate(), std::memory_order_relaxed);
-            buffer_frames_.store(capture_stream_.buffer_frames(), std::memory_order_relaxed);
-            mic_pipeline_.prepare(static_cast<double>(capture_stream_.sample_rate()), kMaxScratchFrames);
-            mixer_bus_.prepare(static_cast<double>(capture_stream_.sample_rate()));
-            any_ok = capture_stream_.start([this](float* data, uint32_t frames, uint32_t ch) {
-                on_mic_capture(data, frames, ch);
-            });
-        }
+        ok = bind_channel_source(1, "hardware_input", input_id).ok && ok;
     }
-
     if (!monitor_id.empty()) {
-        if (monitor_stream_.open(monitor_id, audio::StreamDirection::Render)) {
-            if (monitor_stream_.start([this](float* data, uint32_t frames, uint32_t ch) {
-                    on_monitor_render(data, frames, ch);
-                })) {
-                monitor_active_.store(true, std::memory_order_release);
-                any_ok = true;
-            }
-        }
+        ok = bind_output_bus("A1", monitor_id, 1.0f, false).ok && ok;
     }
-
     if (!output_id.empty()) {
-        if (output_stream_.open(output_id, audio::StreamDirection::Render)) {
-            if (output_stream_.start([this](float* data, uint32_t frames, uint32_t ch) {
-                    on_output_render(data, frames, ch);
-                })) {
-                output_active_.store(true, std::memory_order_release);
-                any_ok = true;
-            }
-        }
+        ok = bind_output_bus("B1", output_id, 1.0f, false).ok && ok;
     }
-
-    return any_ok || (input_id.empty() && monitor_id.empty() && output_id.empty());
+    return ok;
 }
 
 audio::RouteResult AudioEngine::route_app(uint32_t pid,
                                           const std::string& target_device_id,
                                           bool loopback_capture) {
     if (loopback_capture) {
-        std::lock_guard lock(device_mutex_);
-        loopback_active_.store(false, std::memory_order_release);
-        loopback_capture_.stop();
-        const bool ok = loopback_capture_.start(
+        std::lock_guard lock(state_mutex_);
+        uint32_t slot = 0;
+        for (uint32_t i = 2; i < dsp::kDynamicMaxChannels; ++i) {
+            if (!channels_[i].occupied) {
+                slot = i;
+                break;
+            }
+        }
+        if (slot == 0) {
+            return {false, "unsupported", "No free channel slots"};
+        }
+        channels_[slot].occupied = true;
+        channels_[slot].info.channel_id = slot;
+        channels_[slot].info.name = "Loopback " + std::to_string(pid);
+        channels_[slot].info.source_type = "process_loopback";
+        channels_[slot].info.echo_locked_a1_a2 = true;
+        channels_[slot].info.send_b2 = true;
+        dynamic_mixer_.set_channel_active(slot, true);
+        dynamic_mixer_.set_channel_send(slot, 3, true, 1.0f);
+
+        const bool ok = channels_[slot].loopback_capture.start(
             pid,
             true,
-            [this](const float* data, uint32_t frames, uint32_t ch) {
-                on_loopback_capture(data, frames, ch);
+            [this, slot](const float* data, uint32_t frames, uint32_t ch) {
+                on_channel_loopback(slot, data, frames, ch);
             });
-        loopback_active_.store(ok, std::memory_order_release);
-        return {
-            ok,
-            ok ? "loopback_capture" : "unsupported",
-            ok ? "Process loopback capture active" : "Process loopback capture unavailable or blocked"
-        };
+        channels_[slot].stream_active.store(ok, std::memory_order_release);
+        return {ok, ok ? "loopback_capture" : "unsupported",
+                ok ? "Process loopback capture active" : "Process loopback unavailable"};
     }
-
     return audio::AppRouter::route_app_to_device(pid, target_device_id);
 }
 
@@ -384,7 +632,6 @@ ControlServer::RoutingRuleApplyResult AudioEngine::set_routing_rule(const audio:
     if (!result.saved) {
         return result;
     }
-
     const auto sessions = audio::AppRouter::list_sessions();
     for (const auto& s : sessions) {
         if (_stricmp(s.process_name.c_str(), rule.process_name.c_str()) == 0) {
@@ -406,7 +653,6 @@ uint32_t AudioEngine::apply_routing_rules() {
     if (rules.empty()) {
         return 0;
     }
-
     const auto sessions = audio::AppRouter::list_sessions();
     uint32_t applied_count = 0;
     for (const auto& s : sessions) {
@@ -423,113 +669,412 @@ uint32_t AudioEngine::apply_routing_rules() {
     return applied_count;
 }
 
-void AudioEngine::on_mic_capture(float* data, uint32_t frames, uint32_t channels) noexcept {
-    if (data == nullptr || frames == 0 || channels == 0) {
-        return;
+std::vector<DynamicChannelInfo> AudioEngine::list_channels() {
+    std::lock_guard lock(state_mutex_);
+    std::vector<DynamicChannelInfo> out;
+    for (const auto& ch : channels_) {
+        if (ch.occupied) {
+            out.push_back(ch.info);
+        }
     }
-    const size_t n = std::min(static_cast<size_t>(frames), kMaxScratchFrames);
-    for (size_t i = 0; i < n; ++i) {
-        mono_in_scratch_[i] = data[i * channels];
+    return out;
+}
+
+V2CommandResult AudioEngine::create_channel(const std::string& name,
+                                            const std::string& source_type,
+                                            const std::string& color) {
+    if (name.empty()) {
+        return {false, "invalid_name", 0};
+    }
+    std::lock_guard lock(state_mutex_);
+    for (uint32_t i = 2; i < dsp::kDynamicMaxChannels; ++i) {
+        if (!channels_[i].occupied) {
+            auto& ch = channels_[i];
+            ch.occupied = true;
+            ch.stream_active.store(false, std::memory_order_release);
+            ch.pair_group.clear();
+            ch.info = DynamicChannelInfo{};
+            ch.info.channel_id = i;
+            ch.info.name = name;
+            ch.info.source_type = source_type.empty() ? "app_group" : source_type;
+            ch.info.color = color.empty() ? "#6366F1" : color;
+            ch.info.is_system = false;
+            ch.info.echo_locked_a1_a2 = (ch.info.source_type == "process_loopback");
+            ch.info.send_a1 = !ch.info.echo_locked_a1_a2;
+            ch.info.send_b2 = ch.info.echo_locked_a1_a2;
+
+            dynamic_mixer_.set_channel_active(i, true);
+            dynamic_mixer_.set_channel_mix(i, 1.0f, false, false, 0.0f);
+            dynamic_mixer_.set_channel_send(i, 0, ch.info.send_a1, 1.0f);
+            dynamic_mixer_.set_channel_send(i, 1, false, 1.0f);
+            dynamic_mixer_.set_channel_send(i, 2, false, 1.0f);
+            dynamic_mixer_.set_channel_send(i, 3, ch.info.send_b2, 1.0f);
+            return {true, {}, i};
+        }
+    }
+    return {false, "max_channels_reached", 0};
+}
+
+V2CommandResult AudioEngine::delete_channel(uint32_t channel_id) {
+    if (channel_id == 0) {
+        return {false, "cannot_delete_system_channel", channel_id};
+    }
+    if (channel_id >= dsp::kDynamicMaxChannels) {
+        return {false, "invalid_channel_id", channel_id};
+    }
+    std::lock_guard lock(state_mutex_);
+    if (!channels_[channel_id].occupied) {
+        return {false, "channel_not_found", channel_id};
+    }
+    channels_[channel_id].stream_active.store(false, std::memory_order_release);
+    channels_[channel_id].loopback_capture.stop();
+    channels_[channel_id].capture_stream.close();
+    channels_[channel_id].occupied = false;
+    channels_[channel_id].info = DynamicChannelInfo{};
+    channels_[channel_id].pair_group.clear();
+    dynamic_mixer_.set_channel_active(channel_id, false);
+    return {true, {}, channel_id};
+}
+
+V2CommandResult AudioEngine::rename_channel(uint32_t channel_id, const std::string& name) {
+    if (channel_id >= dsp::kDynamicMaxChannels || name.empty()) {
+        return {false, "invalid_params", channel_id};
+    }
+    std::lock_guard lock(state_mutex_);
+    if (!channels_[channel_id].occupied) {
+        return {false, "channel_not_found", channel_id};
+    }
+    channels_[channel_id].info.name = name;
+    return {true, {}, channel_id};
+}
+
+V2CommandResult AudioEngine::bind_channel_source(uint32_t channel_id,
+                                                 const std::string& source_type,
+                                                 const std::string& device_id) {
+    if (channel_id >= dsp::kDynamicMaxChannels) {
+        return {false, "invalid_channel_id", channel_id};
+    }
+    const std::string new_pair = resolve_pair_group(device_id);
+
+    std::lock_guard lock(state_mutex_);
+    auto& ch = channels_[channel_id];
+    if (!ch.occupied) {
+        return {false, "channel_not_found", channel_id};
     }
 
-    mic_pipeline_.process(
-        mono_in_scratch_.data(),
-        mon_l_scratch_.data(),
-        mon_r_scratch_.data(),
-        bcast_l_scratch_.data(),
-        bcast_r_scratch_.data(),
-        n);
-
-    // Pull any captured app loopback audio for ChannelId::Game (channel 1)
-    const bool use_loopback = loopback_active_.load(std::memory_order_acquire);
-    for (size_t i = 0; i < n; ++i) {
-        StereoFrame frame{};
-        (void)loopback_ring_.try_pop(frame);
-        loop_l_scratch_[i] = use_loopback ? frame.l : 0.0f;
-        loop_r_scratch_[i] = use_loopback ? frame.r : 0.0f;
+    const bool sends[4] = {ch.info.send_a1, ch.info.send_a2, ch.info.send_b1, ch.info.send_b2};
+    for (size_t b = 0; b < dsp::kDynamicMaxBuses; ++b) {
+        if (sends[b] && would_create_feedback_loop_locked(
+                            channel_id, device_id, new_pair, b, buses_[b].info.device_id, buses_[b].pair_group)) {
+            return {false, "feedback_loop_detected", channel_id};
+        }
     }
 
-    std::array<const float*, dsp::kMixerChannelCount> in_l{};
-    std::array<const float*, dsp::kMixerChannelCount> in_r{};
-    in_l[static_cast<size_t>(dsp::ChannelId::Game)] = loop_l_scratch_.data();
-    in_r[static_cast<size_t>(dsp::ChannelId::Game)] = loop_r_scratch_.data();
-    in_l[static_cast<size_t>(dsp::ChannelId::Mic)] = bcast_l_scratch_.data();
-    in_r[static_cast<size_t>(dsp::ChannelId::Mic)] = bcast_r_scratch_.data();
+    ch.stream_active.store(false, std::memory_order_release);
+    ch.loopback_capture.stop();
+    ch.capture_stream.close();
 
-    mixer_bus_.process(
-        in_l,
-        in_r,
-        mix_l_scratch_.data(),
-        mix_r_scratch_.data(),
-        n,
-        mic_pipeline_.mic_envelope());
+    ch.info.source_type = source_type;
+    ch.info.device_id = device_id;
+    ch.pair_group = new_pair;
+    ch.info.echo_locked_a1_a2 = (source_type == "process_loopback");
+    if (ch.info.echo_locked_a1_a2) {
+        ch.info.send_a1 = false;
+        ch.info.send_a2 = false;
+        dynamic_mixer_.set_channel_send(channel_id, 0, false, 1.0f);
+        dynamic_mixer_.set_channel_send(channel_id, 1, false, 1.0f);
+    }
 
-    if (monitor_active_.load(std::memory_order_acquire)) {
-        for (size_t i = 0; i < n; ++i) {
-            if (!monitor_ring_.try_push(StereoFrame{mon_l_scratch_[i], mon_r_scratch_[i]})) {
-                xrun_count_.fetch_add(1, std::memory_order_relaxed);
+    if ((source_type == "hardware_input" || source_type == "virtual_endpoint") && !device_id.empty()) {
+        if (ch.capture_stream.open(device_id, audio::StreamDirection::Capture)) {
+            if (ch.capture_stream.start([this, channel_id](float* data, uint32_t frames, uint32_t nch) {
+                    on_channel_capture(channel_id, data, frames, nch);
+                })) {
+                ch.stream_active.store(true, std::memory_order_release);
+            }
+        }
+    }
+    return {true, {}, channel_id};
+}
+
+std::vector<OutputBusInfo> AudioEngine::list_output_buses() {
+    std::lock_guard lock(state_mutex_);
+    std::vector<OutputBusInfo> out;
+    out.reserve(dsp::kDynamicMaxBuses);
+    for (const auto& b : buses_) {
+        out.push_back(b.info);
+    }
+    return out;
+}
+
+V2CommandResult AudioEngine::bind_output_bus(const std::string& bus_id,
+                                             const std::string& device_id,
+                                             float volume,
+                                             bool muted) {
+    const int b_idx = bus_index_from_id(bus_id);
+    if (b_idx < 0) {
+        return {false, "invalid_bus_id", 0};
+    }
+    const size_t bus_idx = static_cast<size_t>(b_idx);
+
+    std::string dev_name;
+    bool dev_virtual = false;
+    std::string bus_pair;
+    if (!device_id.empty()) {
+        const auto devices = audio::WasapiDeviceEnumerator::enumerate_devices();
+        for (const auto& d : devices) {
+            if (d.id == device_id) {
+                dev_name = d.name;
+                dev_virtual = d.is_virtual;
+                bus_pair = d.virtual_pair_group;
                 break;
             }
         }
     }
 
-    if (output_active_.load(std::memory_order_acquire)) {
-        for (size_t i = 0; i < n; ++i) {
-            if (!output_ring_.try_push(StereoFrame{mix_l_scratch_[i], mix_r_scratch_[i]})) {
-                xrun_count_.fetch_add(1, std::memory_order_relaxed);
-                break;
+    std::lock_guard lock(state_mutex_);
+    for (uint32_t c = 0; c < dsp::kDynamicMaxChannels; ++c) {
+        if (!channels_[c].occupied) {
+            continue;
+        }
+        const auto& ci = channels_[c].info;
+        const bool sent = (bus_idx == 0 && ci.send_a1) || (bus_idx == 1 && ci.send_a2) ||
+                          (bus_idx == 2 && ci.send_b1) || (bus_idx == 3 && ci.send_b2);
+        if (sent && would_create_feedback_loop_locked(
+                        c, ci.device_id, channels_[c].pair_group, bus_idx, device_id, bus_pair)) {
+            return {false, "feedback_loop_detected", c};
+        }
+    }
+
+    auto& bus = buses_[bus_idx];
+    bus.stream_active.store(false, std::memory_order_release);
+    bus.render_stream.close();
+
+    bus.info.device_id = device_id;
+    bus.info.device_name = dev_name;
+    bus.info.is_virtual = dev_virtual;
+    bus.pair_group = bus_pair;
+    bus.info.volume = std::clamp(volume, 0.0f, 2.0f);
+    bus.info.muted = muted;
+    bus.info.active = false;
+    dynamic_mixer_.set_bus_mix(bus_idx, bus.info.volume, bus.info.muted);
+
+    if (!device_id.empty()) {
+        if (bus.render_stream.open(device_id, audio::StreamDirection::Render)) {
+            if (bus.render_stream.start([this, bus_idx](float* data, uint32_t frames, uint32_t nch) {
+                    on_bus_render(bus_idx, data, frames, nch);
+                })) {
+                bus.stream_active.store(true, std::memory_order_release);
+                bus.info.active = true;
             }
         }
     }
+    return {true, {}, 0};
 }
 
-void AudioEngine::on_monitor_render(float* data, uint32_t frames, uint32_t channels) noexcept {
-    if (data == nullptr || frames == 0 || channels == 0) {
-        return;
+V2CommandResult AudioEngine::set_channel_send(uint32_t channel_id,
+                                              const std::string& bus_id,
+                                              bool enabled,
+                                              float send_gain) {
+    if (channel_id >= dsp::kDynamicMaxChannels) {
+        return {false, "invalid_channel_id", channel_id};
     }
-    for (uint32_t i = 0; i < frames; ++i) {
-        StereoFrame frame{};
-        (void)monitor_ring_.try_pop(frame);
-        if (channels == 1) {
-            data[i] = 0.5f * (frame.l + frame.r);
-        } else {
-            data[i * channels] = frame.l;
-            data[i * channels + 1] = frame.r;
-            for (uint32_t c = 2; c < channels; ++c) {
-                data[i * channels + c] = 0.0f;
-            }
+    const int b_idx = bus_index_from_id(bus_id);
+    if (b_idx < 0) {
+        return {false, "invalid_bus_id", channel_id};
+    }
+    const size_t bus_idx = static_cast<size_t>(b_idx);
+
+    std::lock_guard lock(state_mutex_);
+    auto& ch = channels_[channel_id];
+    if (!ch.occupied) {
+        return {false, "channel_not_found", channel_id};
+    }
+
+    if (enabled && ch.info.source_type == "process_loopback" && (bus_idx == 0 || bus_idx == 1)) {
+        return {false, "echo_lock_process_loopback", channel_id};
+    }
+
+    if (enabled && would_create_feedback_loop_locked(
+                       channel_id,
+                       ch.info.device_id,
+                       ch.pair_group,
+                       bus_idx,
+                       buses_[bus_idx].info.device_id,
+                       buses_[bus_idx].pair_group)) {
+        return {false, "feedback_loop_detected", channel_id};
+    }
+
+    if (bus_idx == 0) ch.info.send_a1 = enabled;
+    else if (bus_idx == 1) ch.info.send_a2 = enabled;
+    else if (bus_idx == 2) ch.info.send_b1 = enabled;
+    else if (bus_idx == 3) ch.info.send_b2 = enabled;
+
+    dynamic_mixer_.set_channel_send(channel_id, bus_idx, enabled, send_gain);
+    return {true, {}, channel_id};
+}
+
+V2CommandResult AudioEngine::set_channel_dsp(const ChannelDspConfig& cfg) {
+    if (cfg.channel_id >= dsp::kDynamicMaxChannels) {
+        return {false, "invalid_channel_id", cfg.channel_id};
+    }
+    std::lock_guard lock(state_mutex_);
+    if (!channels_[cfg.channel_id].occupied) {
+        return {false, "channel_not_found", cfg.channel_id};
+    }
+    auto& info = channels_[cfg.channel_id].info;
+    info.volume = cfg.volume;
+    info.muted = cfg.muted;
+    info.solo = cfg.solo;
+    info.pan = cfg.pan;
+
+    dynamic_mixer_.set_channel_mix(cfg.channel_id, cfg.volume, cfg.muted, cfg.solo, cfg.pan);
+    dynamic_mixer_.set_channel_dsp(
+        cfg.channel_id,
+        cfg.eq_enabled,
+        cfg.eq_hpf_hz,
+        cfg.eq_low_db,
+        cfg.eq_mid1_hz,
+        cfg.eq_mid1_db,
+        cfg.eq_mid2_hz,
+        cfg.eq_mid2_db,
+        cfg.eq_high_db,
+        cfg.comp_enabled,
+        cfg.comp_threshold_db,
+        cfg.comp_ratio,
+        cfg.comp_makeup_db,
+        cfg.duck_source_id,
+        cfg.duck_depth_db);
+    return {true, {}, cfg.channel_id};
+}
+
+V2CommandResult AudioEngine::bind_app_to_channel(const std::string& process_name,
+                                                 uint32_t channel_id) {
+    if (process_name.empty() || channel_id >= dsp::kDynamicMaxChannels) {
+        return {false, "invalid_params", channel_id};
+    }
+    std::lock_guard lock(state_mutex_);
+    if (!channels_[channel_id].occupied) {
+        return {false, "channel_not_found", channel_id};
+    }
+
+    // Remove from any other channel first
+    for (auto& ch : channels_) {
+        if (!ch.occupied) continue;
+        auto& apps = ch.info.bound_apps;
+        apps.erase(
+            std::remove_if(apps.begin(), apps.end(), [&](const std::string& a) {
+                return _stricmp(a.c_str(), process_name.c_str()) == 0;
+            }),
+            apps.end());
+    }
+
+    channels_[channel_id].info.bound_apps.push_back(process_name);
+    (void)routing_rules_.set_rule(
+        audio::RoutingRule{process_name, channel_id, channels_[channel_id].info.device_id, false});
+    return {true, {}, channel_id};
+}
+
+V2CommandResult AudioEngine::unbind_app_from_channel(const std::string& process_name,
+                                                     uint32_t channel_id) {
+    if (process_name.empty() || channel_id >= dsp::kDynamicMaxChannels) {
+        return {false, "invalid_params", channel_id};
+    }
+    std::lock_guard lock(state_mutex_);
+    if (!channels_[channel_id].occupied) {
+        return {false, "channel_not_found", channel_id};
+    }
+    auto& apps = channels_[channel_id].info.bound_apps;
+    apps.erase(
+        std::remove_if(apps.begin(), apps.end(), [&](const std::string& a) {
+            return _stricmp(a.c_str(), process_name.c_str()) == 0;
+        }),
+        apps.end());
+    (void)routing_rules_.delete_rule(process_name);
+    return {true, {}, channel_id};
+}
+
+V2CommandResult AudioEngine::auto_setup_defaults() {
+    const auto devices = audio::WasapiDeviceEnumerator::enumerate_devices();
+    std::string default_render;
+    std::string default_capture;
+    std::string virtual_mic_render;
+
+    for (const auto& d : devices) {
+        if (d.is_default && !d.is_virtual) {
+            if (d.is_capture && default_capture.empty()) default_capture = d.id;
+            if (!d.is_capture && default_render.empty()) default_render = d.id;
+        }
+        if (!d.is_capture && d.is_virtual && virtual_mic_render.empty()) {
+            virtual_mic_render = d.id;
         }
     }
+
+    if (!default_render.empty()) {
+        (void)bind_output_bus("A1", default_render, 1.0f, false);
+    }
+    if (!default_capture.empty()) {
+        (void)bind_channel_source(1, "hardware_input", default_capture);
+    }
+    if (!virtual_mic_render.empty()) {
+        (void)bind_output_bus("B1", virtual_mic_render, 1.0f, false);
+    }
+    return {true, {}, 0};
 }
 
-void AudioEngine::on_output_render(float* data, uint32_t frames, uint32_t channels) noexcept {
-    if (data == nullptr || frames == 0 || channels == 0) {
+void AudioEngine::on_channel_capture(uint32_t ch_idx,
+                                     float* data,
+                                     uint32_t frames,
+                                     uint32_t channels) noexcept {
+    if (data == nullptr || frames == 0 || channels == 0 || ch_idx >= dsp::kDynamicMaxChannels) {
         return;
     }
-    for (uint32_t i = 0; i < frames; ++i) {
-        StereoFrame frame{};
-        (void)output_ring_.try_pop(frame);
-        if (channels == 1) {
-            data[i] = 0.5f * (frame.l + frame.r);
-        } else {
-            data[i * channels] = frame.l;
-            data[i * channels + 1] = frame.r;
-            for (uint32_t c = 2; c < channels; ++c) {
-                data[i * channels + c] = 0.0f;
-            }
-        }
-    }
-}
-
-void AudioEngine::on_loopback_capture(const float* data, uint32_t frames, uint32_t channels) noexcept {
-    if (data == nullptr || frames == 0 || channels == 0) {
-        return;
-    }
+    auto& ring = channels_[ch_idx].input_ring;
     for (uint32_t i = 0; i < frames; ++i) {
         const float l = data[i * channels];
         const float r = (channels > 1) ? data[i * channels + 1] : l;
-        if (!loopback_ring_.try_push(StereoFrame{l, r})) {
+        if (!ring.try_push(StereoFrame{l, r})) {
             break;
+        }
+    }
+}
+
+void AudioEngine::on_channel_loopback(uint32_t ch_idx,
+                                      const float* data,
+                                      uint32_t frames,
+                                      uint32_t channels) noexcept {
+    if (data == nullptr || frames == 0 || channels == 0 || ch_idx >= dsp::kDynamicMaxChannels) {
+        return;
+    }
+    auto& ring = channels_[ch_idx].input_ring;
+    for (uint32_t i = 0; i < frames; ++i) {
+        const float l = data[i * channels];
+        const float r = (channels > 1) ? data[i * channels + 1] : l;
+        if (!ring.try_push(StereoFrame{l, r})) {
+            break;
+        }
+    }
+}
+
+void AudioEngine::on_bus_render(size_t bus_idx,
+                                float* data,
+                                uint32_t frames,
+                                uint32_t channels) noexcept {
+    if (data == nullptr || frames == 0 || channels == 0 || bus_idx >= dsp::kDynamicMaxBuses) {
+        return;
+    }
+    auto& ring = buses_[bus_idx].output_ring;
+    for (uint32_t i = 0; i < frames; ++i) {
+        StereoFrame f{};
+        (void)ring.try_pop(f);
+        if (channels == 1) {
+            data[i] = 0.5f * (f.l + f.r);
+        } else {
+            data[i * channels] = f.l;
+            data[i * channels + 1] = f.r;
+            for (uint32_t c = 2; c < channels; ++c) {
+                data[i * channels + c] = 0.0f;
+            }
         }
     }
 }

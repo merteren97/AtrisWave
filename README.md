@@ -12,7 +12,9 @@ English | [Türkçe](README-TR.md)
 
 ## Key Capabilities
 
-- **Virtual Channel Splitting**: Route *Master*, *Game*, *Chat*, *Media*, *Aux*, and *Microphone* independently with dedicated faders, mute/solo states, and stream/monitor sub-mixes.
+- **Dynamic 16-Channel Rack (`+ Add Channel`)**: Start cleanly with default *System* (catch-all) and *Microphone* strips, or dynamically add/rename/delete up to 16 virtual channels with dedicated faders, mute/solo states, and drag-and-drop per-app binding.
+- **`A1 / A2 / B1 / B2` Hardware & Virtual Output Matrix**: Route any channel independently to 4 master output buses (*A1/A2* physical headphones/speakers, *B1/B2* virtual stream/chat outputs) with per-bus `-0.5 dBFS` lookahead limiting, **Feedback Loop Blocker**, and **Process Loopback `A1/A2` Echo Lock**.
+- **Dedicated High-Res Master Clock & Failsafe Watchdog**: 10 ms `CreateWaitableTimerExW` Master Clock with per-stream `AdaptivePllResampler`, plus `AtrisWaveWatchdog.exe` 3-layer default-device failsafe so Windows audio never stays stranded on a virtual device.
 - **WASAPI `IAudioClient3` & Per-App Routing**: Low-latency Windows audio backend with **WASAPI Process Loopback** (`AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS`) and persistent per-application routing rules.
 - **Full Dual-Path Microphone DSP**:
   - **Direct Monitor (Sidetone)**: Hear your voice in **~6–12 ms** (WASAPI `IAudioClient3`) bypassing heavy spectral/reverb stages.
@@ -28,18 +30,18 @@ English | [Türkçe](README-TR.md)
 AtrisWave decouples UI rendering, real-time DSP, third-party plugin execution, and kernel audio endpoints (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full engineering specification):
 
 ```text
-  [ C# .NET 10 WPF UI ]  <── 576B Seqlock SHM (60 FPS) ──  [ C++20 Engine Daemon ]
-   (ui/ — Wpf.Ui + Skia)  ── Named Pipe JSON Control ──>   (engine/ — Session 1+)
-                                                                 │            │
-                                          5ms Crash-Bypass SHM ──┘            └── Direct Ring / IOCTL
-                                                  v                                        v
-                                     [ AtrisWavePluginHost.exe ]              [ AtrisWaveVAD.sys (WDK) ]
-                                     (plugin-host/ — CLAP/VST3)                (driver/ — 6 Endpoints)
+  [ C# .NET 10 WPF UI ]  <── 704B Seqlock SHM V2 (60 FPS) ──  [ C++20 Engine Daemon ]
+   (ui/ — Wpf.Ui + Skia)  ── Named Pipe JSON Control ───────>   (engine/ — Session 1+)
+                                                                  │       │       │
+                                           5ms Crash-Bypass SHM ──┘       │       └── Direct Ring / IOCTL
+                                                   v                      v                  v
+                                      [ AtrisWavePluginHost.exe ]  [ Watchdog.exe ]  [ AtrisWaveVAD.sys ]
+                                      (plugin-host/ — CLAP/VST3)   (Failsafe)        (driver/ — 16-Slot Pool)
 ```
 
-1. **Desktop UI (`ui/`)**: C# `.NET 10` WPF application (`AtrisWave.UI.exe`) using `Wpf.Ui` Fluent styling, `SkiaSharp.Views.WPF` (`SKElement`) 60 FPS meters, `H.NotifyIcon.Wpf` system tray, global hotkeys, and loopback JSON-RPC server.
-2. **Audio Engine (`engine/`)**: Headless **C++20** Session 1+ daemon (`AtrisWaveEngine.exe`) running with MMCSS `"Pro Audio"` priority, FTZ/DAZ denormal flushing, lock-free SPSC ring buffers, WASAPI `IAudioClient3` / Process Loopback, and zero-allocation DSP.
-3. **Virtual Audio Driver (`driver/`)**: C++ WDK **WaveRT / SysVAD** kernel driver (`AtrisWaveVAD.sys`) exposing 6 virtual endpoints (*Game*, *Chat*, *Media*, *Aux*, *Processed Mic*, *Stream Mix*) with RFC 3161 test-signing & Attestation Signing scripts (`driver/scripts/build-and-testsign.ps1`).
+1. **Desktop UI (`ui/`)**: C# `.NET 10` WPF application (`AtrisWave.UI.exe`) using `Wpf.Ui` Fluent styling, `SkiaSharp.Views.WPF` (`SKElement`) 60 FPS meters, `H.NotifyIcon.Wpf` system tray, guided Audio Health Check, global hotkeys, and loopback JSON-RPC server.
+2. **Audio Engine & Failsafe (`engine/`)**: Headless **C++20** Session 1+ daemon (`AtrisWaveEngine.exe`) running a dedicated `CreateWaitableTimerExW` Master Clock with MMCSS `"Pro Audio"` priority, FTZ/DAZ denormal flushing, `AdaptivePllResampler`, lock-free SPSC ring buffers, and `AtrisWaveWatchdog.exe` default-device failsafe.
+3. **Virtual Audio Driver (`driver/`)**: C++ WDK **WaveRT / SysVAD** kernel driver (`AtrisWaveVAD.sys`) with a **16-slot `KSJACK_DESCRIPTION.IsConnected` pooled endpoint architecture** and RFC 3161 test-signing & Attestation Signing scripts (`driver/scripts/build-and-testsign.ps1`).
 4. **Out-of-Process Plugin Host (`plugin-host/`)**: Isolated C++20 sandbox (`AtrisWavePluginHost.exe`) for **CLAP** and **VST3 (3.8+)** plugins with lock-free shared-memory audio transport and automatic 5 ms crash-bypass failover.
 
 ---

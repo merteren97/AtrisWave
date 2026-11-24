@@ -56,6 +56,65 @@ struct MicDspConfig {
     float limiter_ceiling_db{-1.0f};
 };
 
+struct DynamicChannelInfo {
+    uint32_t channel_id{0};
+    std::string name;
+    std::string source_type{"app_group"};
+    std::string device_id;
+    std::string color{"#6366F1"};
+    bool is_system{false};
+    float volume{1.0f};
+    bool muted{false};
+    bool solo{false};
+    float pan{0.0f};
+    bool send_a1{false};
+    bool send_a2{false};
+    bool send_b1{false};
+    bool send_b2{false};
+    std::vector<std::string> bound_apps;
+    bool echo_locked_a1_a2{false};
+};
+
+struct OutputBusInfo {
+    std::string bus_id;
+    std::string role;
+    std::string name;
+    std::string device_id;
+    std::string device_name;
+    bool is_virtual{false};
+    float volume{1.0f};
+    bool muted{false};
+    bool active{false};
+};
+
+struct ChannelDspConfig {
+    uint32_t channel_id{0};
+    float volume{1.0f};
+    bool muted{false};
+    bool solo{false};
+    float pan{0.0f};
+    bool eq_enabled{false};
+    float eq_hpf_hz{30.0f};
+    float eq_low_db{0.0f};
+    float eq_mid1_hz{500.0f};
+    float eq_mid1_db{0.0f};
+    float eq_mid2_hz{2500.0f};
+    float eq_mid2_db{0.0f};
+    float eq_high_db{0.0f};
+    bool comp_enabled{false};
+    float comp_threshold_db{-18.0f};
+    float comp_ratio{3.0f};
+    float comp_makeup_db{0.0f};
+    int32_t duck_source_id{-1};
+    float duck_depth_db{-12.0f};
+};
+
+struct V2CommandResult {
+    bool ok{false};
+    std::string error;
+    uint32_t channel_id{0};
+};
+
 /// Non-RT Win32 Named Pipe control server (`\\.\pipe\AtrisWaveEngine`).
 /// Restricted to the current user via an explicit DACL (fails closed if DACL creation fails).
 /// Rejects remote SMB clients (`PIPE_REJECT_REMOTE_CLIENTS`) and caps pending lines at 64 KiB.
@@ -99,6 +158,33 @@ public:
         [[nodiscard]] virtual RoutingRuleApplyResult set_routing_rule(const audio::RoutingRule& rule) = 0;
         [[nodiscard]] virtual bool delete_routing_rule(const std::string& process_name) = 0;
         [[nodiscard]] virtual uint32_t apply_routing_rules() = 0;
+
+        // v2 Dynamic Multi-Channel & Output Bus Matrix
+        [[nodiscard]] virtual std::vector<DynamicChannelInfo> list_channels() = 0;
+        [[nodiscard]] virtual V2CommandResult create_channel(const std::string& name,
+                                                             const std::string& source_type,
+                                                             const std::string& color) = 0;
+        [[nodiscard]] virtual V2CommandResult delete_channel(uint32_t channel_id) = 0;
+        [[nodiscard]] virtual V2CommandResult rename_channel(uint32_t channel_id,
+                                                             const std::string& name) = 0;
+        [[nodiscard]] virtual V2CommandResult bind_channel_source(uint32_t channel_id,
+                                                                  const std::string& source_type,
+                                                                  const std::string& device_id) = 0;
+        [[nodiscard]] virtual std::vector<OutputBusInfo> list_output_buses() = 0;
+        [[nodiscard]] virtual V2CommandResult bind_output_bus(const std::string& bus_id,
+                                                              const std::string& device_id,
+                                                              float volume,
+                                                              bool muted) = 0;
+        [[nodiscard]] virtual V2CommandResult set_channel_send(uint32_t channel_id,
+                                                               const std::string& bus_id,
+                                                               bool enabled,
+                                                               float send_gain) = 0;
+        [[nodiscard]] virtual V2CommandResult set_channel_dsp(const ChannelDspConfig& cfg) = 0;
+        [[nodiscard]] virtual V2CommandResult bind_app_to_channel(const std::string& process_name,
+                                                                  uint32_t channel_id) = 0;
+        [[nodiscard]] virtual V2CommandResult unbind_app_from_channel(const std::string& process_name,
+                                                                      uint32_t channel_id) = 0;
+        [[nodiscard]] virtual V2CommandResult auto_setup_defaults() = 0;
     };
 
     using StatusProvider = std::function<StatusSnapshot()>;

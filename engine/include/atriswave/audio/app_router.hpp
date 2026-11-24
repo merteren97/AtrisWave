@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace atriswave::audio {
@@ -31,6 +32,12 @@ public:
     /// Returns `method = "policy_config"` on success or `method = "unsupported"` cleanly on failure.
     [[nodiscard]] static RouteResult route_app_to_device(uint32_t pid,
                                                            const std::string& target_device_id);
+
+    /// Sets volume (0.0..1.0) and mute state on all active Windows audio sessions matching `process_name`
+    /// via `IAudioSessionManager2` + `ISimpleAudioVolume` (zero-echo driverless control).
+    [[nodiscard]] static bool set_app_session_volume_mute(std::string_view process_name,
+                                                          float volume,
+                                                          bool muted);
 };
 
 } // namespace atriswave::audio

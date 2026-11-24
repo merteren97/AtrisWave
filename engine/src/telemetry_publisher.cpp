@@ -97,9 +97,11 @@ void TelemetryPublisher::publish(const TelemetrySnapshot& snapshot) noexcept {
     mapped_->header.timestamp_qpc = snapshot.header.timestamp_qpc;
     mapped_->header.cpu_load_percent = snapshot.header.cpu_load_percent;
     mapped_->header.xrun_count = snapshot.header.xrun_count;
+    mapped_->header.bus_count = snapshot.header.bus_count;
     std::memcpy(mapped_->header.reserved, snapshot.header.reserved, sizeof(mapped_->header.reserved));
 
     std::memcpy(mapped_->channels, snapshot.channels, sizeof(mapped_->channels));
+    std::memcpy(mapped_->buses, snapshot.buses, sizeof(mapped_->buses));
 
     // Exit write section (even sequence)
     std::atomic_thread_fence(std::memory_order_release);

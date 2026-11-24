@@ -121,12 +121,15 @@ Invoke-Step 'Publish AtrisWave.UI (win-x64 Release)' {
 
 Invoke-Step 'Copy Native Binaries & Docs to Staging Directory' {
     $EngineExe     = Join-Path $RepoRoot 'engine\build\msvc-release\AtrisWaveEngine.exe'
+    $WatchdogExe   = Join-Path $RepoRoot 'engine\build\msvc-release\AtrisWaveWatchdog.exe'
     $PluginHostExe = Join-Path $RepoRoot 'plugin-host\build\msvc-release\AtrisWavePluginHost.exe'
 
     if (-not (Test-Path $EngineExe))     { throw "Missing engine binary: $EngineExe" }
+    if (-not (Test-Path $WatchdogExe))   { throw "Missing watchdog binary: $WatchdogExe" }
     if (-not (Test-Path $PluginHostExe)) { throw "Missing plugin-host binary: $PluginHostExe" }
 
     Copy-Item -Path $EngineExe     -Destination $StagingDir -Force
+    Copy-Item -Path $WatchdogExe   -Destination $StagingDir -Force
     Copy-Item -Path $PluginHostExe -Destination $StagingDir -Force
     Copy-Item -Path (Join-Path $RepoRoot 'LICENSE')   -Destination $StagingDir -Force
     Copy-Item -Path (Join-Path $RepoRoot 'README.md') -Destination $StagingDir -Force

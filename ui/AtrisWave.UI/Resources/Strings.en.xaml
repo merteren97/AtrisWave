@@ -102,6 +102,35 @@
     <sys:String x:Key="Pro_RpcRunning">Listening</sys:String>
     <sys:String x:Key="Pro_RpcStopped">Stopped</sys:String>
 
+    <sys:String x:Key="Health_Title">Audio Setup Check</sys:String>
+    <sys:String x:Key="Health_MissingA1">No Speaker/Headphone bound to A1, or Mic/Virtual Cable missing — click 1-Click Auto-Setup to bind Windows defaults.</sys:String>
+    <sys:String x:Key="Health_AllReady">Audio routing ready (A1 monitor &amp; Microphone active).</sys:String>
+    <sys:String x:Key="Health_AutoSetup">1-Click Auto-Setup</sys:String>
+
+    <sys:String x:Key="Ch_AddChannel">+ Add Channel</sys:String>
+    <sys:String x:Key="Ch_NewNameLabel">Channel Name</sys:String>
+    <sys:String x:Key="Ch_SourceAppGroup">App Group</sys:String>
+    <sys:String x:Key="Ch_SourceMic">Hardware Mic</sys:String>
+    <sys:String x:Key="Ch_SourceLoopback">Process Loopback</sys:String>
+    <sys:String x:Key="Ch_CreateBtn">Create</sys:String>
+    <sys:String x:Key="Ch_CancelBtn">Cancel</sys:String>
+    <sys:String x:Key="Ch_DeleteTooltip">Delete Channel</sys:String>
+    <sys:String x:Key="Ch_EchoLockTooltip">A1/A2 disabled on Process Loopback to prevent double-audio echo</sys:String>
+    <sys:String x:Key="Ch_SendA1">A1</sys:String>
+    <sys:String x:Key="Ch_SendA2">A2</sys:String>
+    <sys:String x:Key="Ch_SendB1">B1</sys:String>
+    <sys:String x:Key="Ch_SendB2">B2</sys:String>
+
+    <sys:String x:Key="Bus_SectionTitle">Master Output Buses</sys:String>
+    <sys:String x:Key="Bus_A1_Name">A1 Headphones</sys:String>
+    <sys:String x:Key="Bus_A1_Desc">Primary Monitor Output</sys:String>
+    <sys:String x:Key="Bus_A2_Name">A2 Speakers</sys:String>
+    <sys:String x:Key="Bus_A2_Desc">Secondary Physical Output</sys:String>
+    <sys:String x:Key="Bus_B1_Name">B1 Mic Out</sys:String>
+    <sys:String x:Key="Bus_B1_Desc">Virtual Mic (Discord / Games)</sys:String>
+    <sys:String x:Key="Bus_B2_Name">B2 Stream Mix</sys:String>
+    <sys:String x:Key="Bus_B2_Desc">Virtual Stream Mix (OBS)</sys:String>
+
     <sys:String x:Key="Routing_Title">Per-App Audio Routing &amp; Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Assign active Windows audio sessions to virtual endpoints or enable Process Loopback capture</sys:String>
     <sys:String x:Key="Routing_RefreshSessions">Refresh Sessions</sys:String>

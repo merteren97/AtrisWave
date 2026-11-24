@@ -105,6 +105,29 @@ public partial class MainWindow : FluentWindow
         }
     }
 
+    private void OnDynamicChannelDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(typeof(AtrisWave.Core.Models.AudioSessionInfo))
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void OnDynamicChannelDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(AtrisWave.Core.Models.AudioSessionInfo)) is AtrisWave.Core.Models.AudioSessionInfo session &&
+            sender is FrameworkElement { DataContext: AtrisWave.Core.Models.DynamicChannelModel channel })
+        {
+            try
+            {
+                await _viewModel.BindSessionToDynamicChannelAsync(session, channel);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (Application.Current is App app && !app.IsExiting)

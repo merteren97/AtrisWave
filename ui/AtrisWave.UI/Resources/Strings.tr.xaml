@@ -102,6 +102,35 @@
     <sys:String x:Key="Pro_RpcRunning">Dinleniyor</sys:String>
     <sys:String x:Key="Pro_RpcStopped">Durduruldu</sys:String>
 
+    <sys:String x:Key="Health_Title">Ses Kurulum Kontrolü</sys:String>
+    <sys:String x:Key="Health_MissingA1">A1'e Hoparlör/Kulaklık bağlı değil veya Mikrofon/Sanal Kablo eksik — Windows varsayılanlarını bağlamak için Otomatik Kur'a tıklayın.</sys:String>
+    <sys:String x:Key="Health_AllReady">Ses yönlendirme hazır (A1 izleme ve Mikrofon etkin).</sys:String>
+    <sys:String x:Key="Health_AutoSetup">5 Sn Otomatik Kur</sys:String>
+
+    <sys:String x:Key="Ch_AddChannel">+ Kanal Ekle</sys:String>
+    <sys:String x:Key="Ch_NewNameLabel">Kanal Adı</sys:String>
+    <sys:String x:Key="Ch_SourceAppGroup">Uygulama Grubu</sys:String>
+    <sys:String x:Key="Ch_SourceMic">Donanım Mikrofonu</sys:String>
+    <sys:String x:Key="Ch_SourceLoopback">Süreç Loopback</sys:String>
+    <sys:String x:Key="Ch_CreateBtn">Oluştur</sys:String>
+    <sys:String x:Key="Ch_CancelBtn">İptal</sys:String>
+    <sys:String x:Key="Ch_DeleteTooltip">Kanalı Sil</sys:String>
+    <sys:String x:Key="Ch_EchoLockTooltip">Çift ses yankısını önlemek için Süreç Loopback kanallarında A1/A2 kilitlidir</sys:String>
+    <sys:String x:Key="Ch_SendA1">A1</sys:String>
+    <sys:String x:Key="Ch_SendA2">A2</sys:String>
+    <sys:String x:Key="Ch_SendB1">B1</sys:String>
+    <sys:String x:Key="Ch_SendB2">B2</sys:String>
+
+    <sys:String x:Key="Bus_SectionTitle">Ana Çıkış Veri Yolları</sys:String>
+    <sys:String x:Key="Bus_A1_Name">A1 Kulaklık</sys:String>
+    <sys:String x:Key="Bus_A1_Desc">Birincil İzleme Çıkışı</sys:String>
+    <sys:String x:Key="Bus_A2_Name">A2 Hoparlör</sys:String>
+    <sys:String x:Key="Bus_A2_Desc">İkincil Fiziksel Çıkış</sys:String>
+    <sys:String x:Key="Bus_B1_Name">B1 Mikrofon Çıkışı</sys:String>
+    <sys:String x:Key="Bus_B1_Desc">Sanal Mikrofon (Discord / Oyun)</sys:String>
+    <sys:String x:Key="Bus_B2_Name">B2 Yayın Miksi</sys:String>
+    <sys:String x:Key="Bus_B2_Desc">Sanal Yayın Çıkışı (OBS)</sys:String>
+
     <sys:String x:Key="Routing_Title">Uygulama Bazlı Ses Yönlendirme ve Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Etkin Windows ses oturumlarını sanal uç noktalara atayın veya Süreç Loopback yakalamayı açın</sys:String>
     <sys:String x:Key="Routing_RefreshSessions">Oturumları Yenile</sys:String>

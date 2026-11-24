@@ -16,6 +16,7 @@
             <conv:LocKeyConverter x:Key="LocKeyConverter" />
             <conv:HexToBrushConverter x:Key="HexToBrushConverter" />
             <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <conv:InverseBoolConverter x:Key="InverseBoolConverter" />
             <conv:BoolToBrushConverter x:Key="ConnectionStatusBrushConverter"
                                        TrueBrush="#10B981"
                                        FalseBrush="#F59E0B" />

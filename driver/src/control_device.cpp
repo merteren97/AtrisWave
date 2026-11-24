@@ -147,6 +147,27 @@ void AtrisWaveEvtIoDeviceControl(
             break;
         }
 
+        case IOCTL_ATRISWAVE_SET_ENDPOINT_CONNECTED: {
+            const AtrisWaveVadSetConnectedRequest* req = nullptr;
+            status = WdfRequestRetrieveInputBuffer(
+                request,
+                sizeof(AtrisWaveVadSetConnectedRequest),
+                reinterpret_cast<PVOID*>(&req),
+                nullptr);
+            if (!NT_SUCCESS(status)) {
+                break;
+            }
+
+            if (req->endpoint_id >= ATRISWAVE_VAD_ENDPOINT_COUNT ||
+                (req->endpoint_id == 0u && req->connected == 0u)) {
+                status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            status = AtrisWaveSetEndpointConnected(ctx, req->endpoint_id, req->connected);
+            break;
+        }
+
         default:
             status = STATUS_INVALID_DEVICE_REQUEST;
             break;

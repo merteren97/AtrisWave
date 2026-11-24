@@ -6,6 +6,7 @@
 #include <hstring.h>
 #include <mmdeviceapi.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 
@@ -248,6 +249,85 @@ RouteResult AppRouter::route_app_to_device(uint32_t pid, const std::string& targ
     }
 
     return {false, "unsupported", "SetPersistedDefaultAudioEndpoint rejected or unsupported"};
+}
+
+bool AppRouter::set_app_session_volume_mute(std::string_view process_name,
+                                            float volume,
+                                            bool muted) {
+    if (process_name.empty()) {
+        return false;
+    }
+
+    ScopedComInit com;
+    if (!com.ok()) {
+        return false;
+    }
+
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    if (FAILED(CoCreateInstance(
+            __uuidof(MMDeviceEnumerator),
+            nullptr,
+            CLSCTX_ALL,
+            __uuidof(IMMDeviceEnumerator),
+            enumerator.put_void())) ||
+        !enumerator) {
+        return false;
+    }
+
+    ComPtr<IMMDevice> default_render;
+    if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, default_render.put())) ||
+        !default_render) {
+        return false;
+    }
+
+    ComPtr<IAudioSessionManager2> session_mgr;
+    if (FAILED(default_render->Activate(
+            __uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, session_mgr.put_void())) ||
+        !session_mgr) {
+        return false;
+    }
+
+    ComPtr<IAudioSessionEnumerator> session_enum;
+    if (FAILED(session_mgr->GetSessionEnumerator(session_enum.put())) || !session_enum) {
+        return false;
+    }
+
+    int count = 0;
+    if (FAILED(session_enum->GetCount(&count)) || count <= 0) {
+        return false;
+    }
+
+    const float clamped_vol = std::clamp(volume, 0.0f, 1.0f);
+    bool updated_any = false;
+
+    for (int i = 0; i < count; ++i) {
+        ComPtr<IAudioSessionControl> ctrl;
+        if (FAILED(session_enum->GetSession(i, ctrl.put())) || !ctrl) {
+            continue;
+        }
+        ComPtr<IAudioSessionControl2> ctrl2;
+        if (FAILED(ctrl.as(ctrl2)) || !ctrl2) {
+            continue;
+        }
+        DWORD pid = 0;
+        if (FAILED(ctrl2->GetProcessId(&pid))) {
+            continue;
+        }
+        const std::string proc = query_process_exe_name(pid);
+        if (_stricmp(proc.c_str(), std::string(process_name).c_str()) != 0) {
+            continue;
+        }
+        ComPtr<ISimpleAudioVolume> simple_vol;
+        if (SUCCEEDED(ctrl.as(simple_vol)) && simple_vol) {
+            const HRESULT hr1 = simple_vol->SetMasterVolume(clamped_vol, nullptr);
+            const HRESULT hr2 = simple_vol->SetMute(muted ? TRUE : FALSE, nullptr);
+            if (SUCCEEDED(hr1) && SUCCEEDED(hr2)) {
+                updated_any = true;
+            }
+        }
+    }
+
+    return updated_any;
 }
 
 } // namespace atriswave::audio
