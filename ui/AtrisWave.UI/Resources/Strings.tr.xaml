@@ -170,6 +170,39 @@
     <sys:String x:Key="Flyout_OpenStudio">AtrisWave Stüdyo'yu Aç</sys:String>
     <sys:String x:Key="Flyout_MicMute">Mikrofonu Sustur</sys:String>
 
+    <sys:String x:Key="Nav_Settings">Ayarlar</sys:String>
+    <sys:String x:Key="Mixer_OutputCardTitle">Çıkış (Hoparlör / Kulaklık)</sys:String>
+    <sys:String x:Key="Mixer_OutputCardDesc">Ana fiziksel oynatma aygıtı</sys:String>
+    <sys:String x:Key="Mixer_InputCardTitle">Giriş (Mikrofon)</sys:String>
+    <sys:String x:Key="Mixer_InputCardDesc">Birincil yakalama mikrofonu</sys:String>
+    <sys:String x:Key="Mixer_OpenMicStudio">Mikrofon Stüdyosunu Aç</sys:String>
+    <sys:String x:Key="Mixer_StreamerMode">Gelişmiş Çoklu Çıkış / Yayıncı Modu (A1/A2/B1/B2)</sys:String>
+    <sys:String x:Key="Ch_BindAppLabel">Uygulama Bağla (İsteğe Bağlı)</sys:String>
+
+    <sys:String x:Key="Mic_PresetRaw">Ham / Temiz</sys:String>
+    <sys:String x:Key="Mic_PresetNatural">Doğal ve Net</sys:String>
+    <sys:String x:Key="Mic_PresetPodcast">Podcast / Radyo</sys:String>
+    <sys:String x:Key="Mic_PresetDiscord">Discord / Oyun</sys:String>
+    <sys:String x:Key="Mic_PresetReverb">Stüdyo Yankısı</sys:String>
+    <sys:String x:Key="Mic_ListenSelf">Kendimi Dinle (İzleme)</sys:String>
+    <sys:String x:Key="Mic_CompareAB">Orijinal / İşlenmiş Karşılaştır (A/B)</sys:String>
+    <sys:String x:Key="Mic_ProMode">Pro Stüdyo Modu</sys:String>
+    <sys:String x:Key="Mic_LiveLevel">Canlı Mikrofon Seviyesi</sys:String>
+    <sys:String x:Key="Mic_NoiseCleanup">Gürültü Temizliği</sys:String>
+    <sys:String x:Key="Mic_NoiseOff">Kapalı</sys:String>
+    <sys:String x:Key="Mic_NoiseLight">Hafif</sys:String>
+    <sys:String x:Key="Mic_NoiseMedium">Orta</sys:String>
+    <sys:String x:Key="Mic_NoiseStrong">Güçlü</sys:String>
+    <sys:String x:Key="Mic_VoiceTone">Ses Tonu</sys:String>
+    <sys:String x:Key="Mic_RumbleFilter">Uğultu Filtresi (HPF)</sys:String>
+    <sys:String x:Key="Mic_VolumeBalance">Ses Dengesi</sys:String>
+    <sys:String x:Key="Mic_AutoLeveler">Otomatik Dengeleyici (Kompresör)</sys:String>
+    <sys:String x:Key="Mic_VoiceEffects">Ses Efektleri</sys:String>
+
+    <sys:String x:Key="Settings_Title">Stüdyo Ayarları ve Pro Otomasyon</sys:String>
+    <sys:String x:Key="Settings_Language">Arayüz Dili (Türkçe / English)</sys:String>
+    <sys:String x:Key="Settings_EngineTitle">Ses Motoru ve Tanılama</sys:String>
+
     <sys:String x:Key="Routing_Title">Uygulama Bazlı Ses Yönlendirme ve Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Etkin Windows ses oturumlarını sanal uç noktalara atayın veya Süreç Loopback yakalamayı açın</sys:String>
     <sys:String x:Key="Routing_RefreshSessions">Oturumları Yenile</sys:String>

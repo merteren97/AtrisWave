@@ -13,6 +13,8 @@ public sealed class PipeProtocolDtoTests
         var settings = new MicDspSettings
         {
             DirectMonitor = true,
+            MonitorProcessed = true,
+            BypassAll = false,
             MonitorGain = 0.85f,
             DenoiseEnabled = true,
             DenoiseStrength = 0.75f,
@@ -26,6 +28,8 @@ public sealed class PipeProtocolDtoTests
         JsonElement root = doc.RootElement;
 
         Assert.True(root.GetProperty("direct_monitor").GetBoolean());
+        Assert.True(root.GetProperty("monitor_processed").GetBoolean());
+        Assert.False(root.GetProperty("bypass_all").GetBoolean());
         Assert.Equal(0.85f, root.GetProperty("monitor_gain").GetSingle(), precision: 4);
         Assert.True(root.GetProperty("denoise_enabled").GetBoolean());
         Assert.Equal(0.75f, root.GetProperty("denoise_strength").GetSingle(), precision: 4);

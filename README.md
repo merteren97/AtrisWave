@@ -24,7 +24,7 @@ English | [Türkçe](README-TR.md)
   - **Broadcast / Stream Chain**: Spectral Denoiser, Noise Gate, 5-Band Cytomic/Simper ZDF SVF Parametric EQ (with **AutoEq `.txt` import** & **Live 32-Band FFT Spectrum Analyzer**), Compressor + **Cross-Channel Sidechain Ducking**, Algorithmic + **FFT Convolution Reverb** (*Studio Booth*, *Broadcast Room*, *Concert Hall*), Real-Time **Pitch Shifter** (`-12 .. +12 st`), and **True-Peak Limiter**.
 - **Out-of-Process Plugin Sandbox (`plugin-host/`)**: Host **CLAP** and **VST3 (3.8+ MIT)** plugins in an isolated `AtrisWavePluginHost.exe` process with **5 ms crash-bypass** protection.
 - **Automation, Hotkeys & Update Checker**: Native Win32 global hotkeys (`Ctrl+Alt+M` Mic Mute, `Ctrl+Alt+S` Sidetone), loopback-only Stream Deck / Touch Portal **JSON-RPC 2.0 API** (`http://127.0.0.1:18923/rpc`), and GitHub Releases update checker.
-- **60 FPS Obsidian Studio Console UI (`v2.1.0-alpha`)**: Left Fluent Navigation Rail (*Mixer*, *Mic Studio*, *App Routing*, *Soundboard*, *Pro & Automation*), custom 60 FPS `SkiaSharp` **Rotary Knobs**, **Console Faders**, and **VU Meters**, **Slide-Out Per-Channel DSP Drawer**, **EarTrumpet-style Quick-Mix Tray Flyout** (`A1 ↔ A2`), custom `atriswave.ico` branding, and instant English / Turkish localization.
+- **60 FPS Obsidian Studio Console UI (`v2.2.0-alpha`)**: Clean Minimalist Default Mixer (auto-starts engine and binds Speaker + Mic on launch, with optional Streamer Mode for `A1/A2/B1/B2`), Simple/Pro Mic Studio with **5 One-Click Studio Voice Presets** & **A/B Compare**, crystal-clear **44.1 / 48 / 96 / 192 kHz** sample-rate PLL matching, custom 60 FPS `SkiaSharp` Rotary Knobs / Console Faders / VU Meters, 12-Pad WAV Soundboard, Quick-Mix Tray Flyout, and EN/TR localization.
 
 ---
 

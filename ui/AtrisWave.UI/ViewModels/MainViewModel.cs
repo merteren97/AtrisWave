@@ -88,9 +88,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isHealthWarning = true;
     [ObservableProperty] private string _healthMessageKey = "Health_MissingA1";
 
+    [ObservableProperty] private bool _isStreamerMode;
+    [ObservableProperty] private bool _isMicProMode;
+    [ObservableProperty] private float _micLiveLevelNormalized;
+    [ObservableProperty] private string _newChannelAppProcess = string.Empty;
+
     [ObservableProperty] private bool _isNewChannelCreatorOpen;
     [ObservableProperty] private string _newChannelName = string.Empty;
     [ObservableProperty] private int _newChannelSourceIndex;
+
+    public OutputBusModel? PrimaryOutputBus => OutputBuses.Count > 0 ? OutputBuses[0] : null;
+    public DynamicChannelModel? PrimaryMicChannel => DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
 
     public event EventHandler<bool>? GlobalHotkeysEnabledChanged;
 
@@ -294,6 +302,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             MicGainReductionNormalized = mic is not null
                 ? Math.Clamp(MathF.Abs(mic.GainReductionDb) / 24.0f, 0.0f, 1.0f)
                 : 0f;
+            MicLiveLevelNormalized = mic is not null
+                ? Math.Clamp(MathF.Max(mic.PeakLeft, mic.PeakRight), 0.0f, 1.0f)
+                : 0f;
         }
         else if (IsEngineConnected)
         {
@@ -383,15 +394,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         string[] palette = ["#A855F7", "#10B981", "#F59E0B", "#EC4899", "#38BDF8"];
         string color = palette[DynamicChannels.Count % palette.Length];
 
-        (bool ok, uint _) = await _pipeClient.CreateChannelAsync(name, sourceType, color);
+        (bool ok, uint createdId) = await _pipeClient.CreateChannelAsync(name, sourceType, color);
         if (ok)
         {
+            if (!string.IsNullOrWhiteSpace(NewChannelAppProcess))
+            {
+                await _pipeClient.BindAppToChannelAsync(NewChannelAppProcess.Trim(), createdId);
+            }
             await RefreshV2MixerStateAsync();
         }
         else
         {
             uint nextId = DynamicChannels.Count > 0 ? DynamicChannels.Max(c => c.ChannelId) + 1 : 2;
-            DynamicChannels.Add(new DynamicChannelModel
+            var ch = new DynamicChannelModel
             {
                 ChannelId = nextId,
                 Name = name,
@@ -399,11 +414,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 Color = color,
                 SendA1 = sourceType != "process_loopback",
                 SendB2 = true,
-            });
+            };
+            if (!string.IsNullOrWhiteSpace(NewChannelAppProcess))
+            {
+                ch.BoundApps.Add(NewChannelAppProcess.Trim());
+            }
+            DynamicChannels.Add(ch);
             AttachChannelHandlers();
         }
 
         NewChannelName = string.Empty;
+        NewChannelAppProcess = string.Empty;
         IsNewChannelCreatorOpen = false;
     }
 
@@ -791,6 +812,66 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             SelectedNavIndex = idx;
         }
+    }
+
+    [RelayCommand]
+    private void ApplyMicVoicePreset(string? presetName)
+    {
+        if (Enum.TryParse<MicVoicePresetId>(presetName, out var preset))
+        {
+            MicVoicePresets.ApplyPreset(preset, MicDsp);
+        }
+    }
+
+    [RelayCommand]
+    private void SetDenoiseLevel(string? level)
+    {
+        switch (level)
+        {
+            case "Light":
+                MicDsp.DenoiseEnabled = true;
+                MicDsp.DenoiseStrength = 0.20f;
+                break;
+            case "Medium":
+                MicDsp.DenoiseEnabled = true;
+                MicDsp.DenoiseStrength = 0.45f;
+                break;
+            case "Strong":
+                MicDsp.DenoiseEnabled = true;
+                MicDsp.DenoiseStrength = 0.75f;
+                break;
+            default:
+                MicDsp.DenoiseEnabled = false;
+                break;
+        }
+    }
+
+    public async Task EnsureEngineAutoStartedAsync()
+    {
+        EnginePipeResponse ping = await _pipeClient.PingAsync();
+        if (!ping.Ok && !_processManager.IsRunning)
+        {
+            if (_processManager.TryStartEngine(out _))
+            {
+                IsEngineProcessRunning = true;
+                EngineActionKey = "Io_StopEngine";
+                await Task.Delay(300);
+            }
+        }
+
+        await RefreshDevicesAsync();
+        await RefreshV2MixerStateAsync();
+        await RefreshSessionsAsync();
+        await RefreshDriverStatusAsync();
+        await RefreshRoutingRulesAsync();
+
+        if (IsHealthWarning)
+        {
+            await AutoSetupDefaultsAsync();
+        }
+
+        OnPropertyChanged(nameof(PrimaryOutputBus));
+        OnPropertyChanged(nameof(PrimaryMicChannel));
     }
 
     [RelayCommand]

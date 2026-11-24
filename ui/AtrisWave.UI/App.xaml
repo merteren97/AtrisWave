@@ -10,6 +10,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
+                <ResourceDictionary Source="Resources/StudioTheme.xaml" />
                 <ResourceDictionary Source="Resources/Strings.en.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
@@ -17,6 +18,7 @@
             <conv:HexToBrushConverter x:Key="HexToBrushConverter" />
             <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
             <conv:InverseBoolConverter x:Key="InverseBoolConverter" />
+            <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
             <conv:BoolToBrushConverter x:Key="ConnectionStatusBrushConverter"
                                        TrueBrush="#10B981"
                                        FalseBrush="#F59E0B" />

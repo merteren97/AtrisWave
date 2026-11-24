@@ -27,13 +27,13 @@
                      ShowMinimize="True"
                      ShowClose="True" />
 
-        <!-- Top Studio Status Bar -->
+        <!-- Ultra-Clean Minimal Top Header -->
         <Border Grid.Row="1"
                 Margin="16,4,16,10"
-                Padding="14,9"
-                CornerRadius="10"
+                Padding="16,10"
+                CornerRadius="12"
                 Background="#990B0F17"
-                BorderBrush="#24FFFFFF"
+                BorderBrush="#1EFFFFFF"
                 BorderThickness="1">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -51,87 +51,18 @@
                                FontSize="18"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center" />
-                    <Border Margin="10,0,0,0"
-                            Padding="8,3"
-                            CornerRadius="6"
-                            Background="#2638BDF8"
-                            BorderBrush="#5538BDF8"
-                            BorderThickness="1"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="{DynamicResource App_Badge}"
-                                   FontSize="10"
-                                   FontWeight="Bold"
-                                   Foreground="#38BDF8" />
-                    </Border>
+                    <Ellipse Width="8"
+                             Height="8"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Fill="{Binding IsEngineConnected, Converter={StaticResource ConnectionStatusBrushConverter}}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Padding="10,5"
-                            Margin="0,0,10,0"
-                            CornerRadius="14"
-                            Background="#1CFFFFFF"
-                            BorderBrush="#2AFFFFFF"
-                            BorderThickness="1"
-                            VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8"
-                                     Height="8"
-                                     Margin="0,0,8,0"
-                                     VerticalAlignment="Center"
-                                     Fill="{Binding IsEngineConnected, Converter={StaticResource ConnectionStatusBrushConverter}}" />
-                            <TextBlock FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center">
-                                <TextBlock.Text>
-                                    <MultiBinding Converter="{StaticResource LocKeyConverter}">
-                                        <Binding Path="StatusBadgeKey" />
-                                        <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
-                                    </MultiBinding>
-                                </TextBlock.Text>
-                            </TextBlock>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Padding="10,5"
-                            Margin="0,0,10,0"
-                            CornerRadius="8"
-                            Background="#14FFFFFF"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SampleRateDisplay}"
-                                   FontSize="12"
-                                   Foreground="#CBD5E1"
-                                   VerticalAlignment="Center" />
-                    </Border>
-
-                    <ui:Button Command="{Binding LaunchOrStopEngineCommand}"
-                               Margin="0,0,8,0"
+                    <ui:Button Content="{DynamicResource Flyout_MicMute}"
+                               Command="{Binding ToggleMicMuteCommand}"
                                Appearance="Secondary"
-                               Padding="12,5">
-                        <ui:Button.Content>
-                            <MultiBinding Converter="{StaticResource LocKeyConverter}">
-                                <Binding Path="EngineActionKey" />
-                                <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
-                            </MultiBinding>
-                        </ui:Button.Content>
-                    </ui:Button>
-
-                    <ui:Button Content="{DynamicResource Status_PingEngine}"
-                               Command="{Binding PingEngineCommand}"
-                               ToolTip="{Binding LastPingMessage}"
-                               Margin="0,0,6,0"
-                               Appearance="Secondary"
-                               Padding="12,5" />
-
-                    <TextBlock Text="{Binding LastPingMessage}"
-                               FontSize="11"
-                               Foreground="#94A3B8"
-                               VerticalAlignment="Center"
-                               Margin="0,0,10,0"
-                               MaxWidth="100"
-                               TextTrimming="CharacterEllipsis" />
-
-                    <ui:Button Content="{DynamicResource Lang_ToggleLabel}"
-                               Command="{Binding ToggleLanguageCommand}"
-                               Appearance="Primary"
-                               Padding="12,5" />
+                               Padding="14,6" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -197,7 +128,7 @@
                     <ListBoxItem Content="{DynamicResource Nav_MicStudio}" />
                     <ListBoxItem Content="{DynamicResource Nav_AppRouting}" />
                     <ListBoxItem Content="{DynamicResource Nav_Soundboard}" />
-                    <ListBoxItem Content="{DynamicResource Nav_ProAutomation}" />
+                    <ListBoxItem Content="{DynamicResource Nav_Settings}" />
                 </ListBox>
             </Border>
 
@@ -255,9 +186,9 @@
                     </views:SoundboardView.Style>
                 </views:SoundboardView>
 
-                <views:ProAutomationView>
-                    <views:ProAutomationView.Style>
-                        <Style TargetType="views:ProAutomationView">
+                <views:SettingsView>
+                    <views:SettingsView.Style>
+                        <Style TargetType="views:SettingsView">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedNavIndex}" Value="4">
@@ -265,8 +196,8 @@
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </views:ProAutomationView.Style>
-                </views:ProAutomationView>
+                    </views:SettingsView.Style>
+                </views:SettingsView>
             </Grid>
         </Grid>
     </Grid>

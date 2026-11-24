@@ -21,13 +21,21 @@ public partial class MainWindow : FluentWindow
         Closed += OnMainWindowClosed;
     }
 
-    private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
+    private async void OnMainWindowLoaded(object sender, RoutedEventArgs e)
     {
         _hotkeyService.Attach(this);
         _hotkeyService.ToggleMicMuteRequested += (_, _) => _viewModel.ToggleMicMuteCommand.Execute(null);
         _hotkeyService.ToggleDirectMonitorRequested += (_, _) => _viewModel.ToggleDirectMonitor();
         _hotkeyService.SetEnabled(_viewModel.GlobalHotkeysEnabled);
         _viewModel.GlobalHotkeysEnabledChanged += (_, enabled) => _hotkeyService.SetEnabled(enabled);
+
+        try
+        {
+            await _viewModel.EnsureEngineAutoStartedAsync();
+        }
+        catch
+        {
+        }
     }
 
     private void OnMainWindowClosed(object? sender, EventArgs e)

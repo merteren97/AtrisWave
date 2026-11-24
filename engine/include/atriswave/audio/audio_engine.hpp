@@ -122,6 +122,11 @@ private:
         std::array<float, 16> leftover_l{};
         std::array<float, 16> leftover_r{};
         size_t leftover_count{0};
+        std::atomic<bool> primed{false};
+        std::atomic<bool> send_a1_rt{false};
+        std::atomic<uint32_t> capture_sr{48000};
+        float last_in_l{0.0f};
+        float last_in_r{0.0f};
         std::atomic<bool> stream_active{false};
         audio::WasapiStream capture_stream;
         audio::ProcessLoopbackCapture loopback_capture;
@@ -133,6 +138,12 @@ private:
         SpscRingBuffer<StereoFrame, 4096> output_ring;
         dsp::AdaptivePllResampler pll_l;
         dsp::AdaptivePllResampler pll_r;
+        std::array<float, 16> leftover_l{};
+        std::array<float, 16> leftover_r{};
+        size_t leftover_count{0};
+        std::atomic<uint32_t> render_sr{48000};
+        float last_out_l{0.0f};
+        float last_out_r{0.0f};
         std::atomic<bool> stream_active{false};
         audio::WasapiStream render_stream;
     };
@@ -172,6 +183,7 @@ private:
     dsp::SpectrumAnalyzer spectrum_analyzer_;
     dsp::SoundboardEngine soundboard_;
     std::atomic<uint32_t> spectrum_source_ch_{1};
+    std::atomic<bool> spectrum_reset_pending_{false};
 
     static constexpr size_t kMasterTickFrames = 480; // 10ms @ 48kHz
     std::array<std::vector<float>, dsp::kDynamicMaxChannels> ch_in_l_;

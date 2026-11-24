@@ -310,6 +310,7 @@ void test_mic_pipeline_and_mixer_bus() {
     params.reverb_enabled = true;
     params.reverb_wet = 0.3f;
     params.limiter_enabled = true;
+    params.monitor_processed = false;
     mic.set_params(params);
 
     // Impulse at sample 0: direct monitor path must respond immediately (no 480-sample denoiser latency!)
@@ -444,6 +445,50 @@ void test_pitch_shifter() {
     ATRIS_CHECK(down_zc < static_cast<std::size_t>(base_zc * 0.65));
 }
 
+void test_denoiser_voice_preservation() {
+    using namespace atriswave::dsp;
+    SpectralDenoiser denoiser;
+    denoiser.prepare(48000.0);
+    denoiser.set_strength(0.50f);
+
+    // Speaking at -12 dBFS (0.25 amplitude) starting on frame 1 must NOT be attenuated > 3 dB
+    constexpr std::size_t kFrames = 9600; // 200ms
+    auto speech = make_sine(kFrames, 1000.0, 48000.0, 0.25f);
+    const float in_rms = compute_rms(std::vector<float>(speech.begin() + 2400, speech.end()));
+    denoiser.process_block(speech.data(), speech.size());
+    const float out_rms = compute_rms(std::vector<float>(speech.begin() + 2400, speech.end()));
+    ATRIS_CHECK(out_rms >= in_rms * 0.707f);
+}
+
+void test_mic_pipeline_bypass_all() {
+    using namespace atriswave::dsp;
+    MicPipeline pipe;
+    pipe.prepare(48000.0, 512);
+
+    MicDspParams params;
+    params.bypass_all = true;
+    params.direct_monitor = true;
+    params.eq_enabled = true;
+    params.eq_low_db = 12.0f;
+    params.gate_enabled = true;
+    params.gate_threshold_db = -6.0f;
+    params.reverb_enabled = true;
+    params.pitch_enabled = true;
+    params.pitch_semitones = 7.0f;
+    pipe.set_params(params);
+
+    constexpr std::size_t kFrames = 512;
+    auto in = make_sine(kFrames, 440.0, 48000.0, 0.25f);
+    std::vector<float> mon_l(kFrames, 0.0f), mon_r(kFrames, 0.0f);
+    std::vector<float> bc_l(kFrames, 0.0f), bc_r(kFrames, 0.0f);
+    pipe.process(in.data(), mon_l.data(), mon_r.data(), bc_l.data(), bc_r.data(), kFrames);
+
+    for (std::size_t i = 0; i < kFrames; ++i) {
+        ATRIS_CHECK(std::abs(bc_l[i] - in[i]) < 1e-5f);
+        ATRIS_CHECK(std::abs(mon_l[i] - in[i]) < 1e-5f);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -458,6 +503,8 @@ int main() {
     test_mic_pipeline_and_mixer_bus();
     test_convolution_reverb();
     test_pitch_shifter();
+    test_denoiser_voice_preservation();
+    test_mic_pipeline_bypass_all();
 
     if (g_failures == 0) {
         std::printf("ALL DSP TESTS PASSED\n");

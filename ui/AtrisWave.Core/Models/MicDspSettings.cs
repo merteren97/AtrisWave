@@ -4,21 +4,23 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace AtrisWave.Core.Models;
 
 /// <summary>
-/// Observable Phase 1 Dual-Path Microphone DSP configuration.
+/// Observable Dual-Path Microphone DSP configuration with clean studio defaults.
 /// </summary>
 public sealed partial class MicDspSettings : ObservableObject
 {
     [ObservableProperty] private bool _directMonitor = true;
+    [ObservableProperty] private bool _monitorProcessed = true;
+    [ObservableProperty] private bool _bypassAll = false;
     [ObservableProperty] private float _monitorGain = 1.0f;
 
-    [ObservableProperty] private bool _denoiseEnabled = true;
-    [ObservableProperty] private float _denoiseStrength = 0.70f;
+    [ObservableProperty] private bool _denoiseEnabled = false;
+    [ObservableProperty] private float _denoiseStrength = 0.25f;
 
-    [ObservableProperty] private bool _gateEnabled = true;
-    [ObservableProperty] private float _gateThresholdDb = -42.0f;
+    [ObservableProperty] private bool _gateEnabled = false;
+    [ObservableProperty] private float _gateThresholdDb = -45.0f;
 
     [ObservableProperty] private bool _eqEnabled = true;
-    [ObservableProperty] private float _eqHpfHz = 80.0f;
+    [ObservableProperty] private float _eqHpfHz = 75.0f;
     [ObservableProperty] private float _eqLowDb = 0.0f;
     [ObservableProperty] private float _eqMid1Hz = 500.0f;
     [ObservableProperty] private float _eqMid1Db = 0.0f;
@@ -26,10 +28,10 @@ public sealed partial class MicDspSettings : ObservableObject
     [ObservableProperty] private float _eqMid2Db = 0.0f;
     [ObservableProperty] private float _eqHighDb = 0.0f;
 
-    [ObservableProperty] private bool _compEnabled = true;
-    [ObservableProperty] private float _compThresholdDb = -18.0f;
-    [ObservableProperty] private float _compRatio = 3.5f;
-    [ObservableProperty] private float _compMakeupDb = 2.0f;
+    [ObservableProperty] private bool _compEnabled = false;
+    [ObservableProperty] private float _compThresholdDb = -20.0f;
+    [ObservableProperty] private float _compRatio = 2.5f;
+    [ObservableProperty] private float _compMakeupDb = 1.5f;
 
     [ObservableProperty] private bool _duckingEnabled = false;
     [ObservableProperty] private float _duckingDepthDb = -12.0f;
@@ -49,6 +51,8 @@ public sealed partial class MicDspSettings : ObservableObject
     public MicDspWireDto ToWireDto() => new()
     {
         DirectMonitor = DirectMonitor,
+        MonitorProcessed = MonitorProcessed,
+        BypassAll = BypassAll,
         MonitorGain = MonitorGain,
         DenoiseEnabled = DenoiseEnabled,
         DenoiseStrength = DenoiseStrength,
@@ -86,6 +90,8 @@ public sealed partial class MicDspSettings : ObservableObject
 public sealed class MicDspWireDto
 {
     [JsonPropertyName("direct_monitor")] public bool DirectMonitor { get; set; }
+    [JsonPropertyName("monitor_processed")] public bool MonitorProcessed { get; set; }
+    [JsonPropertyName("bypass_all")] public bool BypassAll { get; set; }
     [JsonPropertyName("monitor_gain")] public float MonitorGain { get; set; }
 
     [JsonPropertyName("denoise_enabled")] public bool DenoiseEnabled { get; set; }

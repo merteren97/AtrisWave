@@ -463,7 +463,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.1.0-alpha\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.2.0-alpha\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -524,7 +524,9 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
 
     if (*cmd == "set_mic_dsp") {
         MicDspConfig cfg{};
+        if (auto v = extract_json_bool(line, "bypass_all")) cfg.bypass_all = *v;
         if (auto v = extract_json_bool(line, "direct_monitor")) cfg.direct_monitor = *v;
+        if (auto v = extract_json_bool(line, "monitor_processed")) cfg.monitor_processed = *v;
         if (auto v = extract_json_number(line, "monitor_gain")) cfg.monitor_gain = static_cast<float>(*v);
         if (auto v = extract_json_bool(line, "denoise_enabled")) cfg.denoise_enabled = *v;
         if (auto v = extract_json_number(line, "denoise_strength")) cfg.denoise_strength = static_cast<float>(*v);

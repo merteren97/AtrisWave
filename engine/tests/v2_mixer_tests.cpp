@@ -330,6 +330,82 @@ void test_soundboard_wav_decode_and_playback() {
     std::filesystem::remove(wav_path, ec);
 }
 
+void test_44100_to_48000_to_44100_continuous_sine() {
+    atriswave::dsp::AdaptivePllResampler cap_pll;
+    atriswave::dsp::AdaptivePllResampler ren_pll;
+    cap_pll.prepare(44100.0, 48000.0);
+    ren_pll.prepare(48000.0, 44100.0);
+
+    constexpr double kInRate = 44100.0;
+    constexpr double kFreq = 440.0;
+    constexpr double kTwoPi = 6.28318530717958647692;
+    const double max_expected_step = 2.0 * std::sin(kTwoPi * kFreq / (2.0 * kInRate)) * 0.5 + 0.05;
+
+    std::vector<float> cap_leftover_l, cap_leftover_r;
+    std::vector<float> ren_leftover_l, ren_leftover_r;
+    std::vector<float> rendered;
+    rendered.reserve(44100 * 2);
+
+    uint64_t in_sample_idx = 0;
+    for (int tick = 0; tick < 150; ++tick) {
+        // Produce 441 frames (10ms @ 44.1 kHz)
+        std::vector<float> in_l = cap_leftover_l;
+        std::vector<float> in_r = cap_leftover_r;
+        for (int i = 0; i < 441; ++i) {
+            const float s = 0.5f * static_cast<float>(
+                std::sin(kTwoPi * kFreq * static_cast<double>(in_sample_idx++) / kInRate));
+            in_l.push_back(s);
+            in_r.push_back(s);
+        }
+
+        std::vector<float> mid_l(480, 0.0f), mid_r(480, 0.0f);
+        size_t cap_prod = 0;
+        const size_t cap_cons = cap_pll.process_stereo(
+            in_l.data(), in_r.data(), in_l.size(), mid_l.data(), mid_r.data(), 480, cap_prod);
+        cap_leftover_l.assign(in_l.begin() + static_cast<ptrdiff_t>(cap_cons), in_l.end());
+        cap_leftover_r.assign(in_r.begin() + static_cast<ptrdiff_t>(cap_cons), in_r.end());
+
+        std::vector<float> ren_in_l = ren_leftover_l;
+        std::vector<float> ren_in_r = ren_leftover_r;
+        ren_in_l.insert(ren_in_l.end(), mid_l.begin(), mid_l.begin() + static_cast<ptrdiff_t>(cap_prod));
+        ren_in_r.insert(ren_in_r.end(), mid_r.begin(), mid_r.begin() + static_cast<ptrdiff_t>(cap_prod));
+
+        std::vector<float> out_l(512, 0.0f), out_r(512, 0.0f);
+        size_t ren_prod = 0;
+        const size_t ren_cons = ren_pll.process_stereo(
+            ren_in_l.data(), ren_in_r.data(), ren_in_l.size(), out_l.data(), out_r.data(), 512, ren_prod);
+        ren_leftover_l.assign(ren_in_l.begin() + static_cast<ptrdiff_t>(ren_cons), ren_in_l.end());
+        ren_leftover_r.assign(ren_in_r.begin() + static_cast<ptrdiff_t>(ren_cons), ren_in_r.end());
+
+        rendered.insert(rendered.end(), out_l.begin(), out_l.begin() + static_cast<ptrdiff_t>(ren_prod));
+    }
+
+    ATRIS_CHECK(rendered.size() > 60000, "44.1k->48k->44.1k produced continuous output");
+
+    // Check steady-state region (skip first 4410 frames = 100ms filter warmup)
+    size_t zero_crossings = 0;
+    float max_step = 0.0f;
+    float peak = 0.0f;
+    const size_t start = 4410;
+    const size_t end = rendered.size() - 1;
+    for (size_t i = start; i < end; ++i) {
+        const float a = rendered[i];
+        const float b = rendered[i + 1];
+        ATRIS_CHECK(std::isfinite(a), "Resampled output finite");
+        peak = std::max(peak, std::abs(a));
+        max_step = std::max(max_step, std::abs(b - a));
+        if (a <= 0.0f && b > 0.0f) {
+            ++zero_crossings;
+        }
+    }
+    const double duration_s = static_cast<double>(end - start) / kInRate;
+    const double measured_hz = static_cast<double>(zero_crossings) / duration_s;
+
+    ATRIS_CHECK(peak > 0.40f, "Sine amplitude preserved (> 0.40)");
+    ATRIS_CHECK(max_step < max_expected_step, "Sample-to-sample derivative bounded (no clicks/crackles)");
+    ATRIS_CHECK(std::abs(measured_hz - kFreq) < 10.0, "440 Hz frequency preserved (no chipmunk pitch shift)");
+}
+
 } // namespace
 
 int main() {
@@ -339,6 +415,7 @@ int main() {
     test_failsafe_watchdog_roundtrip();
     test_spectrum_analyzer();
     test_soundboard_wav_decode_and_playback();
+    test_44100_to_48000_to_44100_continuous_sine();
 
     if (g_failures == 0) {
         std::cout << "[atriswave_v2_mixer_tests] ALL TESTS PASSED\n";

@@ -57,7 +57,7 @@ public:
 
         fft_real_.fill(0.0f);
         fft_imag_.fill(0.0f);
-        noise_psd_.fill(1e-5f);
+        noise_psd_.fill(1e-7f);
         prev_gain_.fill(1.0f);
         prev_gamma_.fill(1.0f);
         frame_count_ = 0;
@@ -243,22 +243,31 @@ private:
     void apply_spectral_suppression() noexcept {
         ++frame_count_;
 
+        double sq_sum = 0.0;
+        for (std::size_t i = 0; i < kWindowSize; ++i) {
+            const float s = analysis_buf_[i];
+            sq_sum += static_cast<double>(s) * s;
+        }
+        const float frame_rms = static_cast<float>(std::sqrt(sq_sum / static_cast<double>(kWindowSize)));
+        const bool is_quiet_frame = (frame_rms < 0.04f); // < -28 dBFS
+
         // Minimum-statistics / asymmetric noise PSD tracking + decision-directed Wiener gain
         constexpr float kAlphaDd = 0.96f;
-        const float min_gain = 1.0f - 0.92f * strength_; // Floor attenuation up to ~-22 dB
+        const float min_gain = 1.0f - 0.84f * strength_; // Natural floor up to ~-16 dB
 
+        std::array<float, kNumBins> raw_gain{};
         for (std::size_t k = 0; k < kNumBins; ++k) {
             const float re = fft_real_[k];
             const float im = fft_imag_[k];
             const float psd = re * re + im * im;
 
-            if (frame_count_ <= 8) {
-                // Fast initial noise floor calibration
+            if (frame_count_ <= 8 && is_quiet_frame) {
+                // Fast initial noise floor calibration only on quiet non-speech frames
                 const float init_alpha = 1.0f / static_cast<float>(frame_count_);
                 noise_psd_[k] = noise_psd_[k] + init_alpha * (psd - noise_psd_[k]);
             } else {
-                // Asymmetric tracking: fast decay when signal drops, very slow rise when above floor
-                const float track_alpha = (psd < noise_psd_[k]) ? 0.35f : 0.008f;
+                // Gentler asymmetric tracking: avoid musical noise and voice attenuation
+                const float track_alpha = (psd < noise_psd_[k]) ? 0.20f : 0.004f;
                 noise_psd_[k] = noise_psd_[k] + track_alpha * (psd - noise_psd_[k]);
             }
 
@@ -268,13 +277,22 @@ private:
                              (1.0f - kAlphaDd) * std::max(gamma - 1.0f, 0.0f);
 
             const float wiener = xi / (1.0f + xi);
-            const float gain = std::clamp(1.0f - strength_ * (1.0f - wiener), min_gain, 1.0f);
+            raw_gain[k] = std::clamp(1.0f - strength_ * (1.0f - wiener), min_gain, 1.0f);
+            prev_gamma_[k] = gamma;
+        }
+
+        // 3-bin frequency smoothing + temporal smoothing to eliminate metallic/watery artifacts
+        for (std::size_t k = 0; k < kNumBins; ++k) {
+            const float g_prev = (k > 0) ? raw_gain[k - 1] : raw_gain[k];
+            const float g_curr = raw_gain[k];
+            const float g_next = (k + 1 < kNumBins) ? raw_gain[k + 1] : raw_gain[k];
+            const float freq_smoothed = 0.20f * g_prev + 0.60f * g_curr + 0.20f * g_next;
+            const float gain = std::clamp(0.75f * prev_gain_[k] + 0.25f * freq_smoothed, min_gain, 1.0f);
 
             prev_gain_[k] = gain;
-            prev_gamma_[k] = gamma;
 
-            fft_real_[k] = re * gain;
-            fft_imag_[k] = im * gain;
+            fft_real_[k] *= gain;
+            fft_imag_[k] *= gain;
 
             if (k > 0 && k < kFftSize / 2) {
                 const std::size_t mirror = kFftSize - k;

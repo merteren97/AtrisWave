@@ -170,6 +170,39 @@
     <sys:String x:Key="Flyout_OpenStudio">Open AtrisWave Studio</sys:String>
     <sys:String x:Key="Flyout_MicMute">Mic Mute</sys:String>
 
+    <sys:String x:Key="Nav_Settings">Settings</sys:String>
+    <sys:String x:Key="Mixer_OutputCardTitle">Output (Speakers / Headphones)</sys:String>
+    <sys:String x:Key="Mixer_OutputCardDesc">Main physical playback device</sys:String>
+    <sys:String x:Key="Mixer_InputCardTitle">Input (Microphone)</sys:String>
+    <sys:String x:Key="Mixer_InputCardDesc">Primary capture microphone</sys:String>
+    <sys:String x:Key="Mixer_OpenMicStudio">Open Mic Studio</sys:String>
+    <sys:String x:Key="Mixer_StreamerMode">Advanced Multi-Output / Streamer Mode (A1/A2/B1/B2)</sys:String>
+    <sys:String x:Key="Ch_BindAppLabel">Bind App (Optional)</sys:String>
+
+    <sys:String x:Key="Mic_PresetRaw">Raw / Clean</sys:String>
+    <sys:String x:Key="Mic_PresetNatural">Natural &amp; Clear</sys:String>
+    <sys:String x:Key="Mic_PresetPodcast">Podcast / Radio</sys:String>
+    <sys:String x:Key="Mic_PresetDiscord">Discord / Gaming</sys:String>
+    <sys:String x:Key="Mic_PresetReverb">Studio Reverb</sys:String>
+    <sys:String x:Key="Mic_ListenSelf">Listen to Myself (Monitor)</sys:String>
+    <sys:String x:Key="Mic_CompareAB">Compare Original / Processed (A/B)</sys:String>
+    <sys:String x:Key="Mic_ProMode">Pro Studio Mode</sys:String>
+    <sys:String x:Key="Mic_LiveLevel">Live Mic Level</sys:String>
+    <sys:String x:Key="Mic_NoiseCleanup">Noise Cleanup</sys:String>
+    <sys:String x:Key="Mic_NoiseOff">Off</sys:String>
+    <sys:String x:Key="Mic_NoiseLight">Light</sys:String>
+    <sys:String x:Key="Mic_NoiseMedium">Medium</sys:String>
+    <sys:String x:Key="Mic_NoiseStrong">Strong</sys:String>
+    <sys:String x:Key="Mic_VoiceTone">Voice Tone</sys:String>
+    <sys:String x:Key="Mic_RumbleFilter">Rumble Filter (HPF)</sys:String>
+    <sys:String x:Key="Mic_VolumeBalance">Volume Balance</sys:String>
+    <sys:String x:Key="Mic_AutoLeveler">Auto-Leveler (Compressor)</sys:String>
+    <sys:String x:Key="Mic_VoiceEffects">Voice Effects</sys:String>
+
+    <sys:String x:Key="Settings_Title">Studio Settings &amp; Pro Automation</sys:String>
+    <sys:String x:Key="Settings_Language">Interface Language (English / Türkçe)</sys:String>
+    <sys:String x:Key="Settings_EngineTitle">Audio Engine &amp; Diagnostics</sys:String>
+
     <sys:String x:Key="Routing_Title">Per-App Audio Routing &amp; Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Assign active Windows audio sessions to virtual endpoints or enable Process Loopback capture</sys:String>
     <sys:String x:Key="Routing_RefreshSessions">Refresh Sessions</sys:String>

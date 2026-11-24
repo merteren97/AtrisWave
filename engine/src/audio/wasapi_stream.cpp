@@ -215,10 +215,11 @@ bool WasapiStream::open(const std::string& device_id,
         UINT32 max_period = 0;
         if (SUCCEEDED(client3->GetSharedModeEnginePeriod(
                 mix_fmt, &default_period, &fundamental_period, &min_period, &max_period)) &&
-            min_period > 0) {
+            (default_period > 0 || min_period > 0)) {
+            const UINT32 chosen_period = (default_period > 0) ? default_period : min_period;
             const HRESULT init3_hr = client3->InitializeSharedAudioStream(
                 AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                min_period,
+                chosen_period,
                 mix_fmt,
                 nullptr);
             if (SUCCEEDED(init3_hr)) {

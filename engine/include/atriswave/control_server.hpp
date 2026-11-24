@@ -25,24 +25,26 @@ struct ChannelConfig {
 };
 
 struct MicDspConfig {
+    bool bypass_all{false};
     bool direct_monitor{false};
+    bool monitor_processed{true};
     float monitor_gain{1.0f};
-    bool denoise_enabled{true};
-    float denoise_strength{0.6f};
-    bool gate_enabled{true};
+    bool denoise_enabled{false};
+    float denoise_strength{0.35f};
+    bool gate_enabled{false};
     float gate_threshold_db{-45.0f};
     bool eq_enabled{true};
-    float eq_hpf_hz{80.0f};
+    float eq_hpf_hz{75.0f};
     float eq_low_db{0.0f};
-    float eq_mid1_hz{400.0f};
+    float eq_mid1_hz{500.0f};
     float eq_mid1_db{0.0f};
     float eq_mid2_hz{2500.0f};
     float eq_mid2_db{0.0f};
     float eq_high_db{0.0f};
-    bool comp_enabled{true};
-    float comp_threshold_db{-18.0f};
-    float comp_ratio{3.0f};
-    float comp_makeup_db{2.0f};
+    bool comp_enabled{false};
+    float comp_threshold_db{-20.0f};
+    float comp_ratio{2.5f};
+    float comp_makeup_db{1.5f};
     bool ducking_enabled{false};
     float ducking_depth_db{-6.0f};
     bool reverb_enabled{false};

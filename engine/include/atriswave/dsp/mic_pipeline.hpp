@@ -20,18 +20,20 @@ namespace atriswave::dsp {
 /// Plain snapshot of all Microphone DSP parameters.
 struct MicDspParams {
     float pre_gain_db{0.0f};
+    bool bypass_all{false};
     bool direct_monitor{false};
+    bool monitor_processed{true};
     float monitor_gain{1.0f};
 
-    bool denoise_enabled{true};
-    float denoise_strength{0.75f};
+    bool denoise_enabled{false};
+    float denoise_strength{0.35f};
 
-    bool gate_enabled{true};
-    float gate_threshold_db{-40.0f};
-    float gate_close_threshold_db{-46.0f};
+    bool gate_enabled{false};
+    float gate_threshold_db{-45.0f};
+    float gate_close_threshold_db{-51.0f};
 
     bool eq_enabled{true};
-    float eq_hpf_hz{80.0f};
+    float eq_hpf_hz{75.0f};
     float eq_low_db{0.0f};
     float eq_mid1_hz{500.0f};
     float eq_mid1_db{0.0f};
@@ -39,10 +41,10 @@ struct MicDspParams {
     float eq_mid2_db{0.0f};
     float eq_high_db{0.0f};
 
-    bool comp_enabled{true};
-    float comp_threshold_db{-18.0f};
-    float comp_ratio{4.0f};
-    float comp_makeup_db{2.0f};
+    bool comp_enabled{false};
+    float comp_threshold_db{-20.0f};
+    float comp_ratio{2.5f};
+    float comp_makeup_db{1.5f};
 
     bool ducking_enabled{false};
     float ducking_depth_db{-12.0f};
@@ -63,18 +65,20 @@ struct MicDspParams {
 /// Lock-free atomic parameter bridge between control thread and RT audio thread.
 struct MicDspParamsAtomic {
     std::atomic<float> pre_gain_db{0.0f};
+    std::atomic<bool> bypass_all{false};
     std::atomic<bool> direct_monitor{false};
+    std::atomic<bool> monitor_processed{true};
     std::atomic<float> monitor_gain{1.0f};
 
-    std::atomic<bool> denoise_enabled{true};
-    std::atomic<float> denoise_strength{0.75f};
+    std::atomic<bool> denoise_enabled{false};
+    std::atomic<float> denoise_strength{0.35f};
 
-    std::atomic<bool> gate_enabled{true};
-    std::atomic<float> gate_threshold_db{-40.0f};
-    std::atomic<float> gate_close_threshold_db{-46.0f};
+    std::atomic<bool> gate_enabled{false};
+    std::atomic<float> gate_threshold_db{-45.0f};
+    std::atomic<float> gate_close_threshold_db{-51.0f};
 
     std::atomic<bool> eq_enabled{true};
-    std::atomic<float> eq_hpf_hz{80.0f};
+    std::atomic<float> eq_hpf_hz{75.0f};
     std::atomic<float> eq_low_db{0.0f};
     std::atomic<float> eq_mid1_hz{500.0f};
     std::atomic<float> eq_mid1_db{0.0f};
@@ -82,10 +86,10 @@ struct MicDspParamsAtomic {
     std::atomic<float> eq_mid2_db{0.0f};
     std::atomic<float> eq_high_db{0.0f};
 
-    std::atomic<bool> comp_enabled{true};
-    std::atomic<float> comp_threshold_db{-18.0f};
-    std::atomic<float> comp_ratio{4.0f};
-    std::atomic<float> comp_makeup_db{2.0f};
+    std::atomic<bool> comp_enabled{false};
+    std::atomic<float> comp_threshold_db{-20.0f};
+    std::atomic<float> comp_ratio{2.5f};
+    std::atomic<float> comp_makeup_db{1.5f};
 
     std::atomic<bool> ducking_enabled{false};
     std::atomic<float> ducking_depth_db{-12.0f};
@@ -106,7 +110,9 @@ struct MicDspParamsAtomic {
 
     void store(const MicDspParams& p) noexcept {
         pre_gain_db.store(p.pre_gain_db, std::memory_order_relaxed);
+        bypass_all.store(p.bypass_all, std::memory_order_relaxed);
         direct_monitor.store(p.direct_monitor, std::memory_order_relaxed);
+        monitor_processed.store(p.monitor_processed, std::memory_order_relaxed);
         monitor_gain.store(p.monitor_gain, std::memory_order_relaxed);
         denoise_enabled.store(p.denoise_enabled, std::memory_order_relaxed);
         denoise_strength.store(p.denoise_strength, std::memory_order_relaxed);
@@ -142,7 +148,9 @@ struct MicDspParamsAtomic {
     [[nodiscard]] MicDspParams load() const noexcept {
         MicDspParams p;
         p.pre_gain_db = pre_gain_db.load(std::memory_order_relaxed);
+        p.bypass_all = bypass_all.load(std::memory_order_relaxed);
         p.direct_monitor = direct_monitor.load(std::memory_order_relaxed);
+        p.monitor_processed = monitor_processed.load(std::memory_order_relaxed);
         p.monitor_gain = monitor_gain.load(std::memory_order_relaxed);
         p.denoise_enabled = denoise_enabled.load(std::memory_order_relaxed);
         p.denoise_strength = denoise_strength.load(std::memory_order_relaxed);
@@ -260,34 +268,23 @@ public:
         for (std::size_t i = 0; i < num_frames; ++i) {
             const float raw = std::isfinite(mic_in[i]) ? mic_in[i] : 0.0f;
             const float pre = raw * pre_gain_smoother_.next();
-
-            // 1. Direct Monitor Path (zero denoiser/reverb/lookahead latency)
             const float mon_gain = monitor_gain_smoother_.next();
-            if (p.direct_monitor) {
-                float mon = pre;
-                if (p.eq_enabled) {
-                    mon = monitor_eq_.process_sample(mon);
-                }
-                if (p.comp_enabled) {
-                    mon = monitor_comp_.process_sample(mon);
-                }
-                mon *= mon_gain;
-                if (monitor_out_l != nullptr) {
-                    monitor_out_l[i] = mon;
-                }
-                if (monitor_out_r != nullptr) {
-                    monitor_out_r[i] = mon;
-                }
-            } else {
-                if (monitor_out_l != nullptr) {
-                    monitor_out_l[i] = 0.0f;
-                }
-                if (monitor_out_r != nullptr) {
-                    monitor_out_r[i] = 0.0f;
-                }
+
+            if (p.bypass_all) {
+                if (monitor_out_l != nullptr) monitor_out_l[i] = p.direct_monitor ? (pre * mon_gain) : 0.0f;
+                if (monitor_out_r != nullptr) monitor_out_r[i] = p.direct_monitor ? (pre * mon_gain) : 0.0f;
+                if (broadcast_out_l != nullptr) broadcast_out_l[i] = pre;
+                if (broadcast_out_r != nullptr) broadcast_out_r[i] = pre;
+
+                const float abs_bc = std::abs(pre);
+                block_peak = std::max(block_peak, abs_bc);
+                block_sq_sum += static_cast<double>(pre) * pre;
+                const float env_coeff = (abs_bc > mic_envelope_) ? env_attack_coeff_ : env_release_coeff_;
+                mic_envelope_ = flush_denormal(abs_bc + env_coeff * (mic_envelope_ - abs_bc));
+                continue;
             }
 
-            // 2. AI Broadcast Path
+            // 1. AI Broadcast Path
             float bc_l = pre;
             if (p.denoise_enabled) {
                 bc_l = denoiser_.process_sample(bc_l);
@@ -322,6 +319,36 @@ public:
             }
             if (broadcast_out_r != nullptr) {
                 broadcast_out_r[i] = bc_r;
+            }
+
+            // 2. Direct Monitor Path (processed broadcast OR low-latency EQ+Comp sidetone)
+            if (p.direct_monitor) {
+                float mon_l = bc_l;
+                float mon_r = bc_r;
+                if (!p.monitor_processed) {
+                    float mon = pre;
+                    if (p.eq_enabled) {
+                        mon = monitor_eq_.process_sample(mon);
+                    }
+                    if (p.comp_enabled) {
+                        mon = monitor_comp_.process_sample(mon);
+                    }
+                    mon_l = mon;
+                    mon_r = mon;
+                }
+                if (monitor_out_l != nullptr) {
+                    monitor_out_l[i] = mon_l * mon_gain;
+                }
+                if (monitor_out_r != nullptr) {
+                    monitor_out_r[i] = mon_r * mon_gain;
+                }
+            } else {
+                if (monitor_out_l != nullptr) {
+                    monitor_out_l[i] = 0.0f;
+                }
+                if (monitor_out_r != nullptr) {
+                    monitor_out_r[i] = 0.0f;
+                }
             }
 
             // Telemetry & sidechain envelope

@@ -7,7 +7,7 @@
 
 #define MyAppName "AtrisWave"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.1.0-alpha"
+  #define MyAppVersion "2.2.0-alpha"
 #endif
 #define MyAppPublisher "AtrisWave Contributors"
 #define MyAppURL "https://github.com/merteren97/AtrisWave"

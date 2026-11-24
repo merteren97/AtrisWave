@@ -25,7 +25,9 @@ namespace {
 
 dsp::MicDspParams to_dsp_params(const MicDspConfig& cfg) noexcept {
     dsp::MicDspParams p{};
+    p.bypass_all = cfg.bypass_all;
     p.direct_monitor = cfg.direct_monitor;
+    p.monitor_processed = cfg.monitor_processed;
     p.monitor_gain = cfg.monitor_gain;
     p.denoise_enabled = cfg.denoise_enabled;
     p.denoise_strength = cfg.denoise_strength;
@@ -63,7 +65,7 @@ std::string serialize_mic_cfg_json(const MicDspConfig& c) {
     std::snprintf(
         buf,
         sizeof(buf),
-        "{\"direct_monitor\":%s,\"monitor_gain\":%.4f,\"denoise_enabled\":%s,\"denoise_strength\":%.4f,"
+        "{\"bypass_all\":%s,\"direct_monitor\":%s,\"monitor_processed\":%s,\"monitor_gain\":%.4f,\"denoise_enabled\":%s,\"denoise_strength\":%.4f,"
         "\"gate_enabled\":%s,\"gate_threshold_db\":%.4f,\"eq_enabled\":%s,\"eq_hpf_hz\":%.4f,"
         "\"eq_low_db\":%.4f,\"eq_mid1_hz\":%.4f,\"eq_mid1_db\":%.4f,\"eq_mid2_hz\":%.4f,"
         "\"eq_mid2_db\":%.4f,\"eq_high_db\":%.4f,\"comp_enabled\":%s,\"comp_threshold_db\":%.4f,"
@@ -71,7 +73,10 @@ std::string serialize_mic_cfg_json(const MicDspConfig& c) {
         "\"reverb_enabled\":%s,\"reverb_wet\":%.4f,\"reverb_room\":%.4f,\"reverb_damp\":%.4f,"
         "\"reverb_mode\":%u,\"pitch_enabled\":%s,\"pitch_semitones\":%.4f,"
         "\"limiter_enabled\":%s,\"limiter_ceiling_db\":%.4f}",
-        c.direct_monitor ? "true" : "false", c.monitor_gain,
+        c.bypass_all ? "true" : "false",
+        c.direct_monitor ? "true" : "false",
+        c.monitor_processed ? "true" : "false",
+        c.monitor_gain,
         c.denoise_enabled ? "true" : "false", c.denoise_strength,
         c.gate_enabled ? "true" : "false", c.gate_threshold_db,
         c.eq_enabled ? "true" : "false", c.eq_hpf_hz,
@@ -114,7 +119,9 @@ std::optional<bool> find_bool(std::string_view json, std::string_view key) {
 
 MicDspConfig parse_mic_cfg_json(std::string_view json) {
     MicDspConfig c{};
+    if (auto v = find_bool(json, "bypass_all")) c.bypass_all = *v;
     if (auto v = find_bool(json, "direct_monitor")) c.direct_monitor = *v;
+    if (auto v = find_bool(json, "monitor_processed")) c.monitor_processed = *v;
     if (auto v = find_number(json, "monitor_gain")) c.monitor_gain = static_cast<float>(*v);
     if (auto v = find_bool(json, "denoise_enabled")) c.denoise_enabled = *v;
     if (auto v = find_number(json, "denoise_strength")) c.denoise_strength = static_cast<float>(*v);
@@ -156,6 +163,7 @@ void AudioEngine::init_default_slots() {
     for (size_t i = 0; i < dsp::kDynamicMaxChannels; ++i) {
         channels_[i].occupied = false;
         channels_[i].stream_active.store(false, std::memory_order_relaxed);
+        channels_[i].send_a1_rt.store(false, std::memory_order_relaxed);
         channels_[i].info = DynamicChannelInfo{};
         channels_[i].info.channel_id = static_cast<uint32_t>(i);
         channels_[i].pair_group.clear();
@@ -175,6 +183,7 @@ void AudioEngine::init_default_slots() {
         sys.info.color = "#6366F1";
         sys.info.is_system = true;
         sys.info.send_a1 = true;
+        sys.send_a1_rt.store(true, std::memory_order_relaxed);
         dynamic_mixer_.set_channel_active(0, true);
         dynamic_mixer_.set_channel_mix(0, 1.0f, false, false, 0.0f);
         dynamic_mixer_.set_channel_send(0, 0, true, 1.0f);
@@ -225,10 +234,10 @@ bool AudioEngine::start(void* shutdown_event, bool headless_test) {
         ch_in_l_[ch].assign(kMasterTickFrames, 0.0f);
         ch_in_r_[ch].assign(kMasterTickFrames, 0.0f);
     }
-    pll_in_l_.assign(kMasterTickFrames * 2, 0.0f);
-    pll_in_r_.assign(kMasterTickFrames * 2, 0.0f);
-    pll_out_l_.assign(kMasterTickFrames * 2, 0.0f);
-    pll_out_r_.assign(kMasterTickFrames * 2, 0.0f);
+    pll_in_l_.assign(4096, 0.0f);
+    pll_in_r_.assign(4096, 0.0f);
+    pll_out_l_.assign(4096, 0.0f);
+    pll_out_r_.assign(4096, 0.0f);
     mic_mono_scratch_.assign(kMasterTickFrames, 0.0f);
     mic_mon_l_.assign(kMasterTickFrames, 0.0f);
     mic_mon_r_.assign(kMasterTickFrames, 0.0f);
@@ -407,8 +416,22 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
         }
         auto& ring = channels_[ch].input_ring;
         const size_t avail = ring.available_read();
+        const uint32_t ch_sr = channels_[ch].capture_sr.load(std::memory_order_relaxed);
+        const size_t prime_frames = std::max<size_t>(ch_sr / 50u, 256u);
+
+        if (!channels_[ch].primed.load(std::memory_order_acquire)) {
+            if (avail < prime_frames) {
+                std::fill_n(ch_in_l_[ch].data(), frames, 0.0f);
+                std::fill_n(ch_in_r_[ch].data(), frames, 0.0f);
+                continue;
+            }
+            channels_[ch].primed.store(true, std::memory_order_release);
+        }
+
+        const float target_fill =
+            static_cast<float>(prime_frames + ch_sr / 100u) / static_cast<float>(ring.capacity());
         const float fill_ratio = static_cast<float>(avail) / static_cast<float>(ring.capacity());
-        channels_[ch].pll_l.update_pll(fill_ratio, 0.25f);
+        channels_[ch].pll_l.update_pll(fill_ratio, target_fill);
 
         size_t total_in = channels_[ch].leftover_count;
         for (size_t i = 0; i < total_in; ++i) {
@@ -448,13 +471,37 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
                 channels_[ch].leftover_r[i] = pll_in_r_[consumed + i];
             }
             channels_[ch].leftover_count = rem;
-            for (size_t i = produced; i < frames; ++i) {
+            if (produced > 0) {
+                channels_[ch].last_in_l = ch_in_l_[ch][produced - 1];
+                channels_[ch].last_in_r = ch_in_r_[ch][produced - 1];
+            }
+            if (produced < frames) {
+                const size_t decay_len = std::min<size_t>(frames - produced, 32);
+                for (size_t k = 0; k < decay_len; ++k) {
+                    const float att = 1.0f - static_cast<float>(k + 1) / static_cast<float>(decay_len);
+                    ch_in_l_[ch][produced + k] = channels_[ch].last_in_l * att;
+                    ch_in_r_[ch][produced + k] = channels_[ch].last_in_r * att;
+                }
+                for (size_t i = produced + decay_len; i < frames; ++i) {
+                    ch_in_l_[ch][i] = 0.0f;
+                    ch_in_r_[ch][i] = 0.0f;
+                }
+                channels_[ch].last_in_l = 0.0f;
+                channels_[ch].last_in_r = 0.0f;
+            }
+        } else {
+            const size_t decay_len = std::min<size_t>(frames, 32);
+            for (size_t k = 0; k < decay_len; ++k) {
+                const float att = 1.0f - static_cast<float>(k + 1) / static_cast<float>(decay_len);
+                ch_in_l_[ch][k] = channels_[ch].last_in_l * att;
+                ch_in_r_[ch][k] = channels_[ch].last_in_r * att;
+            }
+            for (size_t i = decay_len; i < frames; ++i) {
                 ch_in_l_[ch][i] = 0.0f;
                 ch_in_r_[ch][i] = 0.0f;
             }
-        } else {
-            std::fill_n(ch_in_l_[ch].data(), frames, 0.0f);
-            std::fill_n(ch_in_r_[ch].data(), frames, 0.0f);
+            channels_[ch].last_in_l = 0.0f;
+            channels_[ch].last_in_r = 0.0f;
         }
 
         if (ch == 1) {
@@ -476,6 +523,9 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
         }
     }
 
+    if (spectrum_reset_pending_.exchange(false, std::memory_order_acq_rel)) {
+        spectrum_analyzer_.reset();
+    }
     const uint32_t spec_ch = spectrum_source_ch_.load(std::memory_order_relaxed);
     if (spec_ch < dsp::kDynamicMaxChannels && in_l[spec_ch] != nullptr) {
         spectrum_analyzer_.push_block(in_l[spec_ch], in_r[spec_ch], frames);
@@ -497,8 +547,9 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
         bus_out_l_[3].data(), bus_out_r_[3].data(),
         frames);
 
-    // Sum low-latency Direct Monitor Sidetone into Bus A1 (Headphones) when Mic stream is active
-    if (channels_[1].stream_active.load(std::memory_order_acquire)) {
+    // Sum low-latency Direct Monitor Sidetone into Bus A1 ONLY if Mic->A1 send is OFF (anti-double-audio)
+    if (channels_[1].stream_active.load(std::memory_order_acquire) &&
+        !channels_[1].send_a1_rt.load(std::memory_order_acquire)) {
         for (size_t i = 0; i < frames; ++i) {
             bus_out_l_[0][i] += mic_mon_l_[i];
             bus_out_r_[0][i] += mic_mon_r_[i];
@@ -518,18 +569,41 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
             continue;
         }
         auto& ring = buses_[b].output_ring;
+        const uint32_t bus_sr = buses_[b].render_sr.load(std::memory_order_relaxed);
+        const float target_fill =
+            static_cast<float>(bus_sr / 40u) / static_cast<float>(ring.capacity());
         const float fill_ratio = static_cast<float>(ring.available_read()) / static_cast<float>(ring.capacity());
-        buses_[b].pll_l.update_pll(fill_ratio, 0.25f);
+        buses_[b].pll_l.update_pll(fill_ratio, target_fill);
 
+        size_t total_in = buses_[b].leftover_count;
+        for (size_t i = 0; i < total_in; ++i) {
+            pll_in_l_[i] = buses_[b].leftover_l[i];
+            pll_in_r_[i] = buses_[b].leftover_r[i];
+        }
+        const size_t to_copy = std::min(frames, pll_in_l_.size() - total_in);
+        std::copy_n(bus_out_l_[b].data(), to_copy, pll_in_l_.data() + total_in);
+        std::copy_n(bus_out_r_[b].data(), to_copy, pll_in_r_.data() + total_in);
+        total_in += to_copy;
+
+        const size_t max_out = std::min<size_t>(
+            pll_out_l_.size(),
+            static_cast<size_t>(std::ceil(static_cast<double>(total_in) / buses_[b].pll_l.current_ratio())) + 4);
         size_t produced = 0;
-        (void)buses_[b].pll_l.process_stereo(
-            bus_out_l_[b].data(),
-            bus_out_r_[b].data(),
-            frames,
+        const size_t consumed = buses_[b].pll_l.process_stereo(
+            pll_in_l_.data(),
+            pll_in_r_.data(),
+            total_in,
             pll_out_l_.data(),
             pll_out_r_.data(),
-            pll_out_l_.size(),
+            max_out,
             produced);
+
+        const size_t rem = (total_in > consumed) ? std::min<size_t>(total_in - consumed, 16) : 0;
+        for (size_t i = 0; i < rem; ++i) {
+            buses_[b].leftover_l[i] = pll_in_l_[consumed + i];
+            buses_[b].leftover_r[i] = pll_in_r_[consumed + i];
+        }
+        buses_[b].leftover_count = rem;
 
         for (size_t i = 0; i < produced; ++i) {
             if (!ring.try_push(StereoFrame{pll_out_l_[i], pll_out_r_[i]})) {
@@ -819,6 +893,7 @@ V2CommandResult AudioEngine::create_channel(const std::string& name,
             ch.info.is_system = false;
             ch.info.echo_locked_a1_a2 = (ch.info.source_type == "process_loopback");
             ch.info.send_a1 = !ch.info.echo_locked_a1_a2;
+            ch.send_a1_rt.store(ch.info.send_a1, std::memory_order_release);
             ch.info.send_b2 = ch.info.echo_locked_a1_a2;
 
             dynamic_mixer_.set_channel_active(i, true);
@@ -898,6 +973,7 @@ V2CommandResult AudioEngine::bind_channel_source(uint32_t channel_id,
     ch.info.echo_locked_a1_a2 = (source_type == "process_loopback");
     if (ch.info.echo_locked_a1_a2) {
         ch.info.send_a1 = false;
+        ch.send_a1_rt.store(false, std::memory_order_release);
         ch.info.send_a2 = false;
         dynamic_mixer_.set_channel_send(channel_id, 0, false, 1.0f);
         dynamic_mixer_.set_channel_send(channel_id, 1, false, 1.0f);
@@ -905,6 +981,14 @@ V2CommandResult AudioEngine::bind_channel_source(uint32_t channel_id,
 
     if ((source_type == "hardware_input" || source_type == "virtual_endpoint") && !device_id.empty()) {
         if (ch.capture_stream.open(device_id, audio::StreamDirection::Capture)) {
+            const uint32_t cap_sr = ch.capture_stream.sample_rate();
+            ch.pll_l.prepare(static_cast<double>(cap_sr), 48000.0);
+            ch.input_ring.reset();
+            ch.leftover_count = 0;
+            ch.last_in_l = 0.0f;
+            ch.last_in_r = 0.0f;
+            ch.primed.store(false, std::memory_order_release);
+            ch.capture_sr.store(cap_sr, std::memory_order_relaxed);
             if (ch.capture_stream.start([this, channel_id](float* data, uint32_t frames, uint32_t nch) {
                     on_channel_capture(channel_id, data, frames, nch);
                 })) {
@@ -979,6 +1063,17 @@ V2CommandResult AudioEngine::bind_output_bus(const std::string& bus_id,
 
     if (!device_id.empty()) {
         if (bus.render_stream.open(device_id, audio::StreamDirection::Render)) {
+            const uint32_t ren_sr = bus.render_stream.sample_rate();
+            bus.pll_l.prepare(48000.0, static_cast<double>(ren_sr));
+            bus.output_ring.reset();
+            bus.leftover_count = 0;
+            bus.last_out_l = 0.0f;
+            bus.last_out_r = 0.0f;
+            bus.render_sr.store(ren_sr, std::memory_order_relaxed);
+            const size_t prefill = std::min<size_t>(ren_sr / 50u, 2048u);
+            for (size_t i = 0; i < prefill; ++i) {
+                (void)bus.output_ring.try_push(StereoFrame{0.0f, 0.0f});
+            }
             if (bus.render_stream.start([this, bus_idx](float* data, uint32_t frames, uint32_t nch) {
                     on_bus_render(bus_idx, data, frames, nch);
                 })) {
@@ -1023,7 +1118,10 @@ V2CommandResult AudioEngine::set_channel_send(uint32_t channel_id,
         return {false, "feedback_loop_detected", channel_id};
     }
 
-    if (bus_idx == 0) ch.info.send_a1 = enabled;
+    if (bus_idx == 0) {
+        ch.info.send_a1 = enabled;
+        ch.send_a1_rt.store(enabled, std::memory_order_release);
+    }
     else if (bus_idx == 1) ch.info.send_a2 = enabled;
     else if (bus_idx == 2) ch.info.send_b1 = enabled;
     else if (bus_idx == 3) ch.info.send_b2 = enabled;
@@ -1171,7 +1269,7 @@ V2CommandResult AudioEngine::set_spectrum_source(uint32_t channel_id) {
         return {false, "invalid_channel_id", channel_id};
     }
     spectrum_source_ch_.store(channel_id, std::memory_order_release);
-    spectrum_analyzer_.reset();
+    spectrum_reset_pending_.store(true, std::memory_order_release);
     return {true, {}, channel_id};
 }
 
@@ -1216,10 +1314,19 @@ void AudioEngine::on_bus_render(size_t bus_idx,
     if (data == nullptr || frames == 0 || channels == 0 || bus_idx >= dsp::kDynamicMaxBuses) {
         return;
     }
-    auto& ring = buses_[bus_idx].output_ring;
+    auto& bus = buses_[bus_idx];
+    auto& ring = bus.output_ring;
     for (uint32_t i = 0; i < frames; ++i) {
         StereoFrame f{};
-        (void)ring.try_pop(f);
+        if (ring.try_pop(f)) {
+            bus.last_out_l = f.l;
+            bus.last_out_r = f.r;
+        } else {
+            bus.last_out_l *= 0.96f;
+            bus.last_out_r *= 0.96f;
+            f.l = bus.last_out_l;
+            f.r = bus.last_out_r;
+        }
         if (channels == 1) {
             data[i] = 0.5f * (f.l + f.r);
         } else {
