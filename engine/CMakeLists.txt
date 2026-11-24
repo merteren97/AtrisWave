@@ -18,6 +18,8 @@ add_library(atriswave_engine_core STATIC
     src/audio/process_loopback.cpp
     src/audio/app_router.cpp
     src/audio/config_store.cpp
+    src/audio/routing_rules.cpp
+    src/audio/driver_bridge.cpp
     src/audio/audio_engine.cpp
 )
 
@@ -87,4 +89,18 @@ target_link_libraries(atriswave_dsp_tests
 add_test(
     NAME atriswave_dsp_tests
     COMMAND atriswave_dsp_tests
+)
+
+add_executable(atriswave_driver_bridge_tests
+    tests/driver_bridge_tests.cpp
+)
+
+target_link_libraries(atriswave_driver_bridge_tests
+    PRIVATE
+        atriswave_engine_core
+)
+
+add_test(
+    NAME atriswave_driver_bridge_tests
+    COMMAND atriswave_driver_bridge_tests
 )

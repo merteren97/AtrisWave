@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atriswave/audio/app_router.hpp>
+#include <atriswave/audio/driver_bridge.hpp>
 #include <atriswave/audio/process_loopback.hpp>
+#include <atriswave/audio/routing_rules.hpp>
 #include <atriswave/audio/wasapi_devices.hpp>
 #include <atriswave/audio/wasapi_stream.hpp>
 #include <atriswave/control_server.hpp>
@@ -51,6 +53,12 @@ public:
     [[nodiscard]] std::optional<MicDspConfig> load_preset(const std::string& name) override;
     [[nodiscard]] std::vector<std::string> list_presets() override;
 
+    [[nodiscard]] audio::DriverStatus get_driver_status() override;
+    [[nodiscard]] std::vector<audio::RoutingRule> list_routing_rules() override;
+    [[nodiscard]] ControlServer::RoutingRuleApplyResult set_routing_rule(const audio::RoutingRule& rule) override;
+    [[nodiscard]] bool delete_routing_rule(const std::string& process_name) override;
+    [[nodiscard]] uint32_t apply_routing_rules() override;
+
 private:
     void on_mic_capture(float* data, uint32_t frames, uint32_t channels) noexcept;
     void on_monitor_render(float* data, uint32_t frames, uint32_t channels) noexcept;
@@ -98,6 +106,7 @@ private:
 
     std::mutex config_mutex_;
     MicDspConfig current_mic_cfg_{};
+    audio::RoutingRulesStore routing_rules_;
 
     std::atomic<uint32_t> engine_state_{ATRISWAVE_ENGINE_STATE_STOPPED};
     std::atomic<uint32_t> sample_rate_{48000};

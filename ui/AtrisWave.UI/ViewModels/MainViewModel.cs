@@ -35,13 +35,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<AudioDeviceInfo> InputDevices { get; } = [];
     public ObservableCollection<AudioDeviceInfo> OutputDevices { get; } = [];
     public ObservableCollection<AudioSessionInfo> AudioSessions { get; } = [];
+    public ObservableCollection<RoutingRule> RoutingRules { get; } = [];
     public ObservableCollection<string> Presets { get; } = ["Broadcast Warm", "Podcast Crisp", "Gaming Clean"];
 
     [ObservableProperty] private AudioDeviceInfo? _selectedInputDevice;
     [ObservableProperty] private AudioDeviceInfo? _selectedMonitorDevice;
     [ObservableProperty] private AudioDeviceInfo? _selectedVirtualOutputDevice;
+    [ObservableProperty] private AudioSessionInfo? _selectedAudioSession;
     [ObservableProperty] private string _presetNameInput = "Broadcast Warm";
 
+    [ObservableProperty] private bool _isDriverInstalled;
+    [ObservableProperty] private string _driverStatusKey = "Driver_StatusBridge";
     [ObservableProperty] private bool _isEngineConnected;
     [ObservableProperty] private bool _isEngineProcessRunning;
     [ObservableProperty] private EngineState _engineState = EngineState.Stopped;
@@ -251,6 +255,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             await Task.Delay(250);
             await RefreshDevicesAsync();
             await RefreshSessionsAsync();
+            await RefreshDriverStatusAsync();
+            await RefreshRoutingRulesAsync();
         }
         else
         {
@@ -315,6 +321,81 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         await _pipeClient.RouteAppAsync(session.Pid, session.TargetDeviceId, session.LoopbackCapture);
+    }
+
+    [RelayCommand]
+    private async Task RefreshDriverStatusAsync()
+    {
+        DriverStatusInfo status = await _pipeClient.GetDriverStatusAsync();
+        IsDriverInstalled = status.DriverInstalled;
+        DriverStatusKey = status.DriverInstalled ? "Driver_StatusActive" : "Driver_StatusBridge";
+    }
+
+    [RelayCommand]
+    private async Task RefreshRoutingRulesAsync()
+    {
+        IReadOnlyList<RoutingRule> rules = await _pipeClient.ListRoutingRulesAsync();
+        RoutingRules.Clear();
+        foreach (RoutingRule rule in rules)
+        {
+            RoutingRules.Add(rule);
+        }
+    }
+
+    [RelayCommand]
+    private Task AssignSelectedSessionToChannelAsync(string? channelIdStr)
+    {
+        if (SelectedAudioSession is null || !Enum.TryParse<MixerChannelId>(channelIdStr, out MixerChannelId channelId))
+        {
+            return Task.CompletedTask;
+        }
+
+        return AssignSessionToChannelAsync(SelectedAudioSession, channelId);
+    }
+
+    public async Task AssignSessionToChannelAsync(AudioSessionInfo session, MixerChannelId channelId)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        string targetDeviceId = !string.IsNullOrWhiteSpace(session.TargetDeviceId)
+            ? session.TargetDeviceId
+            : (SelectedVirtualOutputDevice?.Id ?? SelectedMonitorDevice?.Id ?? string.Empty);
+
+        var rule = new RoutingRule
+        {
+            ProcessName = string.IsNullOrWhiteSpace(session.AppName) ? session.EffectiveLabel : session.AppName,
+            ChannelId = (uint)channelId,
+            TargetDeviceId = targetDeviceId,
+            LoopbackCapture = session.LoopbackCapture,
+        };
+
+        EnginePipeResponse resp = await _pipeClient.SetRoutingRuleAsync(rule);
+        if (resp.Ok)
+        {
+            await RefreshRoutingRulesAsync();
+        }
+    }
+
+    [RelayCommand]
+    private async Task ApplyAllRoutingRulesAsync()
+    {
+        await _pipeClient.ApplyRoutingRulesAsync();
+        await RefreshSessionsAsync();
+    }
+
+    [RelayCommand]
+    private async Task DeleteRoutingRuleAsync(RoutingRule? rule)
+    {
+        if (rule is null || string.IsNullOrWhiteSpace(rule.ProcessName))
+        {
+            return;
+        }
+
+        EnginePipeResponse resp = await _pipeClient.DeleteRoutingRuleAsync(rule.ProcessName);
+        if (resp.Ok)
+        {
+            RoutingRules.Remove(rule);
+        }
     }
 
     [RelayCommand]

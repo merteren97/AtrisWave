@@ -97,4 +97,56 @@ public sealed class PipeProtocolDtoTests
         Assert.NotNull(presets);
         Assert.Contains("Broadcast Warm", presets);
     }
+
+    [Fact]
+    public void DriverStatusAndRoutingRule_DeserializeFromEngineEnvelope()
+    {
+        const string driverEnvelope = """
+            {
+              "id": 2,
+              "ok": true,
+              "result": {
+                "driver_installed": false,
+                "driver_version": 0,
+                "endpoint_count": 6,
+                "fallback_mode": "wasapi_vbcable"
+              }
+            }
+            """;
+
+        using (JsonDocument doc = JsonDocument.Parse(driverEnvelope))
+        {
+            JsonElement res = doc.RootElement.GetProperty("result");
+            DriverStatusInfo? status = JsonSerializer.Deserialize<DriverStatusInfo>(res.GetRawText());
+            Assert.NotNull(status);
+            Assert.False(status.DriverInstalled);
+            Assert.Equal(6u, status.EndpointCount);
+            Assert.Equal("wasapi_vbcable", status.FallbackMode);
+        }
+
+        const string rulesEnvelope = """
+            {
+              "id": 3,
+              "ok": true,
+              "result": {
+                "rules": [
+                  {"process_name":"TestGame.exe","channel_id":1,"target_device_id":"dev-game","loopback_capture":true}
+                ]
+              }
+            }
+            """;
+
+        using (JsonDocument doc = JsonDocument.Parse(rulesEnvelope))
+        {
+            JsonElement res = doc.RootElement.GetProperty("result");
+            List<RoutingRule>? rules = JsonSerializer.Deserialize<List<RoutingRule>>(res.GetProperty("rules").GetRawText());
+            Assert.NotNull(rules);
+            Assert.Single(rules);
+            Assert.Equal("TestGame.exe", rules[0].ProcessName);
+            Assert.Equal(1u, rules[0].ChannelId);
+            Assert.Equal("dev-game", rules[0].TargetDeviceId);
+            Assert.True(rules[0].LoopbackCapture);
+            Assert.Equal("Channel_Game", rules[0].ChannelNameKey);
+        }
+    }
 }

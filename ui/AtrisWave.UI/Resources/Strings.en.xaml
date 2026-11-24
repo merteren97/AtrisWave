@@ -88,6 +88,17 @@
     <sys:String x:Key="Routing_ColLoopback">Process Loopback</sys:String>
     <sys:String x:Key="Routing_NoSessions">No active audio sessions detected. Launch or connect the engine and click Refresh.</sys:String>
 
+    <sys:String x:Key="Driver_StatusActive">AtrisWaveVAD.sys Active (Zero-Copy Kernel Virtual Audio)</sys:String>
+    <sys:String x:Key="Driver_StatusBridge">Phase 1 Bridge Mode (WASAPI / VB-Cable / Process Loopback)</sys:String>
+    <sys:String x:Key="Driver_RefreshStatus">Check Driver</sys:String>
+    <sys:String x:Key="Driver_DropHint">Drag an app row onto a virtual bus pill (or click a pill with a row selected) to save a persistent routing rule:</sys:String>
+    <sys:String x:Key="Rules_Title">Saved Persistent Routing Rules</sys:String>
+    <sys:String x:Key="Rules_ApplyAll">Apply All Rules</sys:String>
+    <sys:String x:Key="Rules_Delete">Delete</sys:String>
+    <sys:String x:Key="Rules_ProcessCol">Process</sys:String>
+    <sys:String x:Key="Rules_ChannelCol">Virtual Bus</sys:String>
+    <sys:String x:Key="Rules_TargetCol">Target Device</sys:String>
+
     <sys:String x:Key="Tray_ShowMixer">Show Mixer</sys:String>
     <sys:String x:Key="Tray_MuteMic">Mute Microphone</sys:String>
     <sys:String x:Key="Tray_Language">Language: EN / TR</sys:String>

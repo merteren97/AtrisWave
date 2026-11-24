@@ -80,6 +80,26 @@ public:
         return audio::ConfigStore::list_presets();
     }
 
+    audio::DriverStatus get_driver_status() override {
+        return audio::DriverBridge::probe_driver();
+    }
+
+    std::vector<audio::RoutingRule> list_routing_rules() override {
+        return {};
+    }
+
+    ControlServer::RoutingRuleApplyResult set_routing_rule(const audio::RoutingRule&) override {
+        return {};
+    }
+
+    bool delete_routing_rule(const std::string&) override {
+        return false;
+    }
+
+    uint32_t apply_routing_rules() override {
+        return 0;
+    }
+
 private:
     ControlServer::StatusProvider status_provider_;
     ControlServer::ShutdownCallback on_shutdown_;
@@ -411,7 +431,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.2.0\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.3.0\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -551,6 +571,66 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         }
         json += "]}";
         return make_ok_response(id, json);
+    }
+
+    if (*cmd == "get_driver_status") {
+        const auto ds = handler_->get_driver_status();
+        const std::string json =
+            "{\"driver_installed\":" + std::string(ds.driver_installed ? "true" : "false") +
+            ",\"driver_version\":" + std::to_string(ds.driver_version) +
+            ",\"endpoint_count\":" + std::to_string(ds.endpoint_count) +
+            ",\"fallback_mode\":\"" + audio::json_escape(ds.fallback_mode) + "\"}";
+        return make_ok_response(id, json);
+    }
+
+    if (*cmd == "list_routing_rules") {
+        const auto rules = handler_->list_routing_rules();
+        std::string json = "{\"rules\":[";
+        for (size_t i = 0; i < rules.size(); ++i) {
+            if (i > 0) json.push_back(',');
+            const auto& r = rules[i];
+            json += "{\"process_name\":\"" + audio::json_escape(r.process_name) +
+                    "\",\"channel_id\":" + std::to_string(r.channel_id) +
+                    ",\"target_device_id\":\"" + audio::json_escape(r.target_device_id) +
+                    "\",\"loopback_capture\":" + (r.loopback_capture ? "true" : "false") + "}";
+        }
+        json += "]}";
+        return make_ok_response(id, json);
+    }
+
+    if (*cmd == "set_routing_rule") {
+        const auto proc = extract_json_string(line, "process_name");
+        if (!proc.has_value() || proc->empty()) {
+            return make_err_response(id, "invalid_process_name");
+        }
+        audio::RoutingRule rule{};
+        rule.process_name = *proc;
+        rule.channel_id = static_cast<uint32_t>(extract_json_uint(line, "channel_id").value_or(1));
+        rule.target_device_id = extract_json_string(line, "target_device_id").value_or("");
+        rule.loopback_capture = extract_json_bool(line, "loopback_capture").value_or(false);
+
+        const auto res = handler_->set_routing_rule(rule);
+        if (!res.saved) {
+            return make_err_response(id, "save_routing_rule_failed");
+        }
+        const std::string json =
+            "{\"saved\":true,\"applied\":" + std::string(res.applied ? "true" : "false") +
+            ",\"method\":\"" + audio::json_escape(res.method) + "\"}";
+        return make_ok_response(id, json);
+    }
+
+    if (*cmd == "delete_routing_rule") {
+        const auto proc = extract_json_string(line, "process_name");
+        if (!proc.has_value() || proc->empty()) {
+            return make_err_response(id, "invalid_process_name");
+        }
+        const bool deleted = handler_->delete_routing_rule(*proc);
+        return make_ok_response(id, std::string("{\"deleted\":") + (deleted ? "true}" : "false}"));
+    }
+
+    if (*cmd == "apply_routing_rules") {
+        const uint32_t count = handler_->apply_routing_rules();
+        return make_ok_response(id, "{\"applied_count\":" + std::to_string(count) + "}");
     }
 
     return make_err_response(id, "unknown_command");

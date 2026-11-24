@@ -1,0 +1,155 @@
+;
+; AtrisWaveVAD.inf
+; AtrisWave Virtual Audio Driver (KMDF 1.33 / ACX + WaveRT)
+; Multi-endpoint Windows 10/11 (x64 & ARM64) INF
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = MEDIA
+ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider    = %ManufacturerName%
+CatalogFile = AtrisWaveVAD.cat
+DriverVer   = 11/24/2026,0.1.0.0
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13 ; Driver Store (run-from-DriverStore compliant)
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+AtrisWaveVAD.sys = 1,,
+
+[Manufacturer]
+%ManufacturerName% = AtrisWaveVAD_Models, NTamd64.10.0...22000, NTarm64.10.0...22000, NTamd64, NTarm64
+
+[AtrisWaveVAD_Models.NTamd64.10.0...22000]
+%DeviceDesc% = AtrisWaveVAD_Device, ROOT\AtrisWaveVAD
+
+[AtrisWaveVAD_Models.NTarm64.10.0...22000]
+%DeviceDesc% = AtrisWaveVAD_Device, ROOT\AtrisWaveVAD
+
+[AtrisWaveVAD_Models.NTamd64]
+%DeviceDesc% = AtrisWaveVAD_Device, ROOT\AtrisWaveVAD
+
+[AtrisWaveVAD_Models.NTarm64]
+%DeviceDesc% = AtrisWaveVAD_Device, ROOT\AtrisWaveVAD
+
+[AtrisWaveVAD_Device.NT]
+Include   = ks.inf, wdmaudio.inf
+Needs     = KS.Registration, WDMAUDIO.Registration
+CopyFiles = AtrisWaveVAD_CopyFiles
+AddReg    = AtrisWaveVAD_AddReg
+
+[AtrisWaveVAD_CopyFiles]
+AtrisWaveVAD.sys
+
+[AtrisWaveVAD_AddReg]
+HKR,,FriendlyName,,%DeviceDesc%
+HKR,Parameters,EndpointCount,0x00010001,6
+HKR,Parameters\Endpoints\0,FriendlyName,,%EndpointGame%
+HKR,Parameters\Endpoints\0,Direction,0x00010001,0 ; Render (Playback)
+HKR,Parameters\Endpoints\1,FriendlyName,,%EndpointChat%
+HKR,Parameters\Endpoints\1,Direction,0x00010001,0 ; Render (Playback)
+HKR,Parameters\Endpoints\2,FriendlyName,,%EndpointMedia%
+HKR,Parameters\Endpoints\2,Direction,0x00010001,0 ; Render (Playback)
+HKR,Parameters\Endpoints\3,FriendlyName,,%EndpointAux%
+HKR,Parameters\Endpoints\3,Direction,0x00010001,0 ; Render (Playback)
+HKR,Parameters\Endpoints\4,FriendlyName,,%EndpointMic%
+HKR,Parameters\Endpoints\4,Direction,0x00010001,1 ; Capture (Mic Out)
+HKR,Parameters\Endpoints\5,FriendlyName,,%EndpointStreamMix%
+HKR,Parameters\Endpoints\5,Direction,0x00010001,1 ; Capture (Stream Mix)
+
+[AtrisWaveVAD_Device.NT.Interfaces]
+; Control device interface GUID_DEVINTERFACE_ATRISWAVE_VAD
+AddInterface = {3713CB20-17E2-4673-8615-F26D528D8255}, "AtrisWaveVADControl", AtrisWaveVAD_Interface_Control
+; KS Audio Topology & WaveRT categories
+AddInterface = %KSCATEGORY_AUDIO%, "AtrisWaveGame",      AtrisWaveVAD_Interface_Game
+AddInterface = %KSCATEGORY_RENDER%, "AtrisWaveGame",     AtrisWaveVAD_Interface_Game
+AddInterface = %KSCATEGORY_AUDIO%, "AtrisWaveChat",      AtrisWaveVAD_Interface_Chat
+AddInterface = %KSCATEGORY_RENDER%, "AtrisWaveChat",     AtrisWaveVAD_Interface_Chat
+AddInterface = %KSCATEGORY_AUDIO%, "AtrisWaveMedia",     AtrisWaveVAD_Interface_Media
+AddInterface = %KSCATEGORY_RENDER%, "AtrisWaveMedia",    AtrisWaveVAD_Interface_Media
+AddInterface = %KSCATEGORY_AUDIO%, "AtrisWaveAux",       AtrisWaveVAD_Interface_Aux
+AddInterface = %KSCATEGORY_RENDER%, "AtrisWaveAux",      AtrisWaveVAD_Interface_Aux
+AddInterface = %KSCATEGORY_AUDIO%, "AtrisWaveMic",       AtrisWaveVAD_Interface_Mic
+AddInterface = %KSCATEGORY_CAPTURE%, "AtrisWaveMic",     AtrisWaveVAD_Interface_Mic
+AddInterface = %KSCATEGORY_AUDIO%, "AtrisWaveStreamMix", AtrisWaveVAD_Interface_StreamMix
+AddInterface = %KSCATEGORY_CAPTURE%, "AtrisWaveStreamMix", AtrisWaveVAD_Interface_StreamMix
+
+[AtrisWaveVAD_Interface_Control]
+AddReg = AtrisWaveVAD_Interface_Control_AddReg
+
+[AtrisWaveVAD_Interface_Control_AddReg]
+HKR,,FriendlyName,,%DeviceDesc%
+
+[AtrisWaveVAD_Interface_Game]
+AddReg = AtrisWaveVAD_Interface_Game_AddReg
+[AtrisWaveVAD_Interface_Game_AddReg]
+HKR,,FriendlyName,,%EndpointGame%
+HKR,,CLSID,,%Proxy.CLSID%
+
+[AtrisWaveVAD_Interface_Chat]
+AddReg = AtrisWaveVAD_Interface_Chat_AddReg
+[AtrisWaveVAD_Interface_Chat_AddReg]
+HKR,,FriendlyName,,%EndpointChat%
+HKR,,CLSID,,%Proxy.CLSID%
+
+[AtrisWaveVAD_Interface_Media]
+AddReg = AtrisWaveVAD_Interface_Media_AddReg
+[AtrisWaveVAD_Interface_Media_AddReg]
+HKR,,FriendlyName,,%EndpointMedia%
+HKR,,CLSID,,%Proxy.CLSID%
+
+[AtrisWaveVAD_Interface_Aux]
+AddReg = AtrisWaveVAD_Interface_Aux_AddReg
+[AtrisWaveVAD_Interface_Aux_AddReg]
+HKR,,FriendlyName,,%EndpointAux%
+HKR,,CLSID,,%Proxy.CLSID%
+
+[AtrisWaveVAD_Interface_Mic]
+AddReg = AtrisWaveVAD_Interface_Mic_AddReg
+[AtrisWaveVAD_Interface_Mic_AddReg]
+HKR,,FriendlyName,,%EndpointMic%
+HKR,,CLSID,,%Proxy.CLSID%
+
+[AtrisWaveVAD_Interface_StreamMix]
+AddReg = AtrisWaveVAD_Interface_StreamMix_AddReg
+[AtrisWaveVAD_Interface_StreamMix_AddReg]
+HKR,,FriendlyName,,%EndpointStreamMix%
+HKR,,CLSID,,%Proxy.CLSID%
+
+[AtrisWaveVAD_Device.NT.Services]
+AddService = AtrisWaveVAD, 0x00000002, AtrisWaveVAD_Service_Inst
+
+[AtrisWaveVAD_Service_Inst]
+DisplayName    = %ServiceDesc%
+ServiceType    = 1 ; SERVICE_KERNEL_DRIVER
+StartType      = 3 ; SERVICE_DEMAND_START
+ErrorControl   = 1 ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\AtrisWaveVAD.sys
+
+[AtrisWaveVAD_Device.NT.Wdf]
+KmdfService = AtrisWaveVAD, AtrisWaveVAD_wdfsect
+
+[AtrisWaveVAD_wdfsect]
+KmdfLibraryVersion = 1.33
+
+[Strings]
+ManufacturerName  = "MCorp / AtrisWave"
+DiskName          = "AtrisWave Virtual Audio Driver Installation Disk"
+DeviceDesc        = "AtrisWave Virtual Audio Device"
+ServiceDesc       = "AtrisWave Virtual Audio Driver Service"
+Proxy.CLSID       = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO  = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_CAPTURE= "{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+
+EndpointGame      = "AtrisWave Game"
+EndpointChat      = "AtrisWave Chat"
+EndpointMedia     = "AtrisWave Media"
+EndpointAux       = "AtrisWave Aux"
+EndpointMic       = "AtrisWave Mic"
+EndpointStreamMix = "AtrisWave Stream Mix"

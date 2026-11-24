@@ -88,6 +88,17 @@
     <sys:String x:Key="Routing_ColLoopback">Süreç Loopback</sys:String>
     <sys:String x:Key="Routing_NoSessions">Etkin ses oturumu bulunamadı. Motoru başlatıp Yenile'ye tıklayın.</sys:String>
 
+    <sys:String x:Key="Driver_StatusActive">AtrisWaveVAD.sys Etkin (Sıfır Kopyalı Çekirdek Sanal Ses)</sys:String>
+    <sys:String x:Key="Driver_StatusBridge">Faz 1 Köprü Modu (WASAPI / VB-Cable / Süreç Loopback)</sys:String>
+    <sys:String x:Key="Driver_RefreshStatus">Sürücüyü Kontrol Et</sys:String>
+    <sys:String x:Key="Driver_DropHint">Kalıcı yönlendirme kuralı kaydetmek için bir uygulama satırını sanal veri yolu düğmesine sürükleyin (veya seçip tıklayın):</sys:String>
+    <sys:String x:Key="Rules_Title">Kayıtlı Kalıcı Yönlendirme Kuralları</sys:String>
+    <sys:String x:Key="Rules_ApplyAll">Tüm Kuralları Uygula</sys:String>
+    <sys:String x:Key="Rules_Delete">Sil</sys:String>
+    <sys:String x:Key="Rules_ProcessCol">Süreç</sys:String>
+    <sys:String x:Key="Rules_ChannelCol">Sanal Veri Yolu</sys:String>
+    <sys:String x:Key="Rules_TargetCol">Hedef Aygıt</sys:String>
+
     <sys:String x:Key="Tray_ShowMixer">Mikseri Göster</sys:String>
     <sys:String x:Key="Tray_MuteMic">Mikrofonu Sustur</sys:String>
     <sys:String x:Key="Tray_Language">Dil: TR / EN</sys:String>

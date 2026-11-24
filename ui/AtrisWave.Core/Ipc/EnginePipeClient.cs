@@ -144,6 +144,48 @@ public sealed class EnginePipeClient : IDisposable
         return [];
     }
 
+    public async Task<DriverStatusInfo> GetDriverStatusAsync(CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync("get_driver_status", null, cancellationToken).ConfigureAwait(false);
+        if (!TryUnwrapResult(resp, out JsonElement result))
+        {
+            return new DriverStatusInfo();
+        }
+
+        return JsonSerializer.Deserialize<DriverStatusInfo>(result.GetRawText()) ?? new DriverStatusInfo();
+    }
+
+    public async Task<IReadOnlyList<RoutingRule>> ListRoutingRulesAsync(CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync("list_routing_rules", null, cancellationToken).ConfigureAwait(false);
+        if (!TryUnwrapResult(resp, out JsonElement result))
+        {
+            return [];
+        }
+
+        if (result.TryGetProperty("rules", out JsonElement rulesEl) && rulesEl.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<RoutingRule>>(rulesEl.GetRawText()) ?? [];
+        }
+
+        return [];
+    }
+
+    public Task<EnginePipeResponse> SetRoutingRuleAsync(RoutingRule rule, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        return SendCommandAsync("set_routing_rule", rule, cancellationToken);
+    }
+
+    public Task<EnginePipeResponse> DeleteRoutingRuleAsync(string processName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(processName);
+        return SendCommandAsync("delete_routing_rule", new { process_name = processName }, cancellationToken);
+    }
+
+    public Task<EnginePipeResponse> ApplyRoutingRulesAsync(CancellationToken cancellationToken = default)
+        => SendCommandAsync("apply_routing_rules", null, cancellationToken);
+
     private static bool TryUnwrapResult(EnginePipeResponse resp, out JsonElement result)
     {
         if (resp.Ok && resp.Payload is JsonElement root)

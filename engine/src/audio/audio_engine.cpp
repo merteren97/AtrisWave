@@ -362,6 +362,59 @@ std::vector<std::string> AudioEngine::list_presets() {
     return audio::ConfigStore::list_presets();
 }
 
+audio::DriverStatus AudioEngine::get_driver_status() {
+    return audio::DriverBridge::probe_driver();
+}
+
+std::vector<audio::RoutingRule> AudioEngine::list_routing_rules() {
+    return routing_rules_.list_rules();
+}
+
+ControlServer::RoutingRuleApplyResult AudioEngine::set_routing_rule(const audio::RoutingRule& rule) {
+    ControlServer::RoutingRuleApplyResult result{};
+    result.saved = routing_rules_.set_rule(rule);
+    if (!result.saved) {
+        return result;
+    }
+
+    const auto sessions = audio::AppRouter::list_sessions();
+    for (const auto& s : sessions) {
+        if (_stricmp(s.process_name.c_str(), rule.process_name.c_str()) == 0) {
+            const auto route_res = route_app(s.pid, rule.target_device_id, rule.loopback_capture);
+            result.applied = route_res.ok;
+            result.method = route_res.method;
+            break;
+        }
+    }
+    return result;
+}
+
+bool AudioEngine::delete_routing_rule(const std::string& process_name) {
+    return routing_rules_.delete_rule(process_name);
+}
+
+uint32_t AudioEngine::apply_routing_rules() {
+    const auto rules = routing_rules_.list_rules();
+    if (rules.empty()) {
+        return 0;
+    }
+
+    const auto sessions = audio::AppRouter::list_sessions();
+    uint32_t applied_count = 0;
+    for (const auto& s : sessions) {
+        for (const auto& r : rules) {
+            if (_stricmp(s.process_name.c_str(), r.process_name.c_str()) == 0) {
+                const auto res = route_app(s.pid, r.target_device_id, r.loopback_capture);
+                if (res.ok) {
+                    ++applied_count;
+                }
+                break;
+            }
+        }
+    }
+    return applied_count;
+}
+
 void AudioEngine::on_mic_capture(float* data, uint32_t frames, uint32_t channels) noexcept {
     if (data == nullptr || frames == 0 || channels == 0) {
         return;

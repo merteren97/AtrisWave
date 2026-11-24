@@ -1,6 +1,8 @@
 #pragma once
 
 #include <atriswave/audio/app_router.hpp>
+#include <atriswave/audio/driver_bridge.hpp>
+#include <atriswave/audio/routing_rules.hpp>
 #include <atriswave/audio/wasapi_devices.hpp>
 #include <atriswave/ipc_protocol.h>
 
@@ -63,6 +65,12 @@ public:
         uint32_t channel_count{6};
     };
 
+    struct RoutingRuleApplyResult {
+        bool saved{false};
+        bool applied{false};
+        std::string method{"none"};
+    };
+
     class IControlHandler {
     public:
         virtual ~IControlHandler() = default;
@@ -81,6 +89,13 @@ public:
         [[nodiscard]] virtual bool save_preset(const std::string& name) = 0;
         [[nodiscard]] virtual std::optional<MicDspConfig> load_preset(const std::string& name) = 0;
         [[nodiscard]] virtual std::vector<std::string> list_presets() = 0;
+
+        // Phase 2: Virtual Audio Driver & Persistent Routing Rules
+        [[nodiscard]] virtual audio::DriverStatus get_driver_status() = 0;
+        [[nodiscard]] virtual std::vector<audio::RoutingRule> list_routing_rules() = 0;
+        [[nodiscard]] virtual RoutingRuleApplyResult set_routing_rule(const audio::RoutingRule& rule) = 0;
+        [[nodiscard]] virtual bool delete_routing_rule(const std::string& process_name) = 0;
+        [[nodiscard]] virtual uint32_t apply_routing_rules() = 0;
     };
 
     using StatusProvider = std::function<StatusSnapshot()>;

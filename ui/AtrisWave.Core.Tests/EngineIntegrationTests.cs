@@ -29,10 +29,12 @@ public sealed class EngineIntegrationTests
 
         Assert.NotNull(process);
 
+        const string testPresetName = "IntegrationTestPreset";
+        const string testRuleProcess = "TestGame.exe";
+        using var pipe = new EnginePipeClient(TelemetryConstants.PipeName, TimeSpan.FromSeconds(2));
+
         try
         {
-            using var pipe = new EnginePipeClient(TelemetryConstants.PipeName, TimeSpan.FromSeconds(2));
-
             // 1. Wait for pipe server startup & PingAsync
             EnginePipeResponse? pingResp = null;
             for (int i = 0; i < 30; i++)
@@ -79,7 +81,6 @@ public sealed class EngineIntegrationTests
             Assert.True(setDspResp.Ok, $"SetMicDspAsync failed: {setDspResp.Error}");
 
             // 5b. SavePresetAsync -> ListPresetsAsync -> LoadPresetAsync (proves live result unwrapping)
-            const string testPresetName = "IntegrationTestPreset";
             EnginePipeResponse savePresetResp = await pipe.SavePresetAsync(testPresetName);
             Assert.True(savePresetResp.Ok, $"SavePresetAsync failed: {savePresetResp.Error}");
 
@@ -88,6 +89,27 @@ public sealed class EngineIntegrationTests
 
             EnginePipeResponse loadPresetResp = await pipe.LoadPresetAsync(testPresetName);
             Assert.True(loadPresetResp.Ok, $"LoadPresetAsync failed: {loadPresetResp.Error}");
+
+            // 5c. Phase 2 Driver Status & Persistent Routing Rules roundtrip
+            DriverStatusInfo driverStatus = await pipe.GetDriverStatusAsync();
+            Assert.Equal(6u, driverStatus.EndpointCount);
+            Assert.False(string.IsNullOrWhiteSpace(driverStatus.FallbackMode));
+
+            var testRule = new RoutingRule
+            {
+                ProcessName = testRuleProcess,
+                ChannelId = (uint)MixerChannelId.Game,
+                TargetDeviceId = "test-device-id",
+                LoopbackCapture = false,
+            };
+            EnginePipeResponse setRuleResp = await pipe.SetRoutingRuleAsync(testRule);
+            Assert.True(setRuleResp.Ok, $"SetRoutingRuleAsync failed: {setRuleResp.Error}");
+
+            IReadOnlyList<RoutingRule> rules = await pipe.ListRoutingRulesAsync();
+            Assert.Contains(rules, r => string.Equals(r.ProcessName, testRuleProcess, StringComparison.OrdinalIgnoreCase));
+
+            EnginePipeResponse delRuleResp = await pipe.DeleteRoutingRuleAsync(testRuleProcess);
+            Assert.True(delRuleResp.Ok, $"DeleteRoutingRuleAsync failed: {delRuleResp.Error}");
 
             // 6. SharedMemoryTelemetryReader: verify snapshot & advancing seqlock sequence
             using var shm = new SharedMemoryTelemetryReader(TelemetryConstants.SharedMemoryName);
@@ -136,7 +158,21 @@ public sealed class EngineIntegrationTests
             {
                 if (!process.HasExited)
                 {
+                    await pipe.DeleteRoutingRuleAsync(testRuleProcess);
                     process.Kill(entireProcessTree: true);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string presetPath = Path.Combine(localAppData, "AtrisWave", "presets", $"{testPresetName}.json");
+                if (File.Exists(presetPath))
+                {
+                    File.Delete(presetPath);
                 }
             }
             catch
