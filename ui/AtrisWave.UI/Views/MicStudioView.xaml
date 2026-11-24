@@ -9,34 +9,44 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top Quick-Tune Bar: 5 Studio Voice Presets + Listen/A-B/Simple-Pro + Live Mic Level -->
+        <!-- Top Quick-Tune Bar: 5 Studio Voice Presets (Single Row) + Listen/A-B/Pro + Live Mic Level -->
         <Border Grid.Row="0" Style="{StaticResource StudioCardStyle}" Margin="0,0,0,14">
             <StackPanel>
-                <DockPanel Margin="0,0,0,12">
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <ToggleButton Content="{DynamicResource Mic_ListenSelf}"
-                                      IsChecked="{Binding MicDsp.DirectMonitor, Mode=TwoWay}"
-                                      Margin="0,0,8,0"
-                                      Padding="12,6" />
-                        <ToggleButton Content="{DynamicResource Mic_CompareAB}"
-                                      IsChecked="{Binding MicDsp.BypassAll, Mode=TwoWay}"
-                                      Margin="0,0,8,0"
-                                      Padding="12,6" />
-                        <ui:ToggleSwitch Content="{DynamicResource Mic_ProMode}"
-                                         IsChecked="{Binding IsMicProMode, Mode=TwoWay}"
-                                         VerticalAlignment="Center" />
-                    </StackPanel>
+                <!-- Row 1: All 5 Presets on ONE balanced row -->
+                <UniformGrid Rows="1" Columns="5" Margin="0,0,0,10">
+                    <ui:Button Content="{DynamicResource Mic_PresetRaw}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="RawClean" Margin="0,0,6,0" HorizontalAlignment="Stretch" Appearance="Secondary" />
+                    <ui:Button Content="{DynamicResource Mic_PresetNatural}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="NaturalClear" Margin="0,0,6,0" HorizontalAlignment="Stretch" Appearance="Primary" />
+                    <ui:Button Content="{DynamicResource Mic_PresetPodcast}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="PodcastRadio" Margin="0,0,6,0" HorizontalAlignment="Stretch" Appearance="Secondary" />
+                    <ui:Button Content="{DynamicResource Mic_PresetDiscord}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="DiscordGaming" Margin="0,0,6,0" HorizontalAlignment="Stretch" Appearance="Secondary" />
+                    <ui:Button Content="{DynamicResource Mic_PresetReverb}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="StudioReverb" HorizontalAlignment="Stretch" Appearance="Secondary" />
+                </UniformGrid>
 
-                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:Button Content="{DynamicResource Mic_PresetRaw}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="RawClean" Margin="0,0,6,0" Appearance="Secondary" />
-                        <ui:Button Content="{DynamicResource Mic_PresetNatural}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="NaturalClear" Margin="0,0,6,0" Appearance="Primary" />
-                        <ui:Button Content="{DynamicResource Mic_PresetPodcast}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="PodcastRadio" Margin="0,0,6,0" Appearance="Secondary" />
-                        <ui:Button Content="{DynamicResource Mic_PresetDiscord}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="DiscordGaming" Margin="0,0,6,0" Appearance="Secondary" />
-                        <ui:Button Content="{DynamicResource Mic_PresetReverb}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="StudioReverb" Appearance="Secondary" />
-                    </WrapPanel>
+                <!-- Row 2: Listen to Myself + Compare A/B + Pro Mode -->
+                <DockPanel Margin="0,0,0,10">
+                    <ui:ToggleSwitch DockPanel.Dock="Right"
+                                     Content="{DynamicResource Mic_ProMode}"
+                                     IsChecked="{Binding IsMicProMode, Mode=TwoWay}"
+                                     VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ToggleButton IsChecked="{Binding MicDsp.DirectMonitor, Mode=TwoWay}"
+                                      Margin="0,0,10,0"
+                                      Padding="12,6">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource Icon_Headphones}" Width="14" Height="14" Stretch="Uniform" Stroke="#38BDF8" StrokeThickness="1.8" Margin="0,0,7,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{DynamicResource Mic_ListenSelf}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton IsChecked="{Binding MicDsp.BypassAll, Mode=TwoWay}"
+                                      Padding="12,6">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource Icon_Compare}" Width="14" Height="14" Stretch="Uniform" Stroke="#F59E0B" StrokeThickness="1.8" Margin="0,0,7,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{DynamicResource Mic_CompareAB}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
                 </DockPanel>
 
-                <!-- Live Mic Level Bar -->
+                <!-- Row 3: Live Mic Level Bar -->
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

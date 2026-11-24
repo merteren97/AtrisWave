@@ -270,18 +270,18 @@ bool AudioEngine::start(void* shutdown_event, bool headless_test) {
 
     engine_state_.store(ATRISWAVE_ENGINE_STATE_RUNNING, std::memory_order_release);
 
-    if (!headless_test) {
-        (void)failsafe_.arm_current_system_defaults();
-        launch_watchdog_if_present();
-        (void)auto_setup_defaults();
-    }
-
     master_running_.store(true, std::memory_order_release);
     master_thread_ = std::thread(&AudioEngine::master_clock_loop, this);
 
     if (!control_server_.start(ATRISWAVE_PIPE_NAME_W, this)) {
         stop();
         return false;
+    }
+
+    if (!headless_test) {
+        (void)failsafe_.arm_current_system_defaults();
+        launch_watchdog_if_present();
+        (void)auto_setup_defaults();
     }
 
     return true;

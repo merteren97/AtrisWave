@@ -41,10 +41,14 @@
 
                 <DockPanel Grid.Row="0" Margin="0,0,0,14">
                     <ui:Button DockPanel.Dock="Right"
-                               Content="{DynamicResource Ch_AddChannel}"
                                Command="{Binding ToggleNewChannelCreatorCommand}"
                                Appearance="Primary"
-                               Padding="14,7" />
+                               Padding="14,7">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon_Plus}" Width="13" Height="13" Stretch="Uniform" Stroke="#F8FAFC" StrokeThickness="2" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource Ch_AddChannel}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ui:Button>
                     <StackPanel>
                         <TextBlock Text="{DynamicResource Mixer_SectionTitle}" FontSize="16" FontWeight="SemiBold" />
                         <TextBlock Text="{DynamicResource Mixer_SectionSubtitle}" FontSize="12" Foreground="#94A3B8" Margin="0,2,0,0" />
@@ -311,7 +315,30 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,10,0">
                             <DockPanel>
-                                <ToggleButton DockPanel.Dock="Right" Content="{DynamicResource Channel_MuteShort}" IsChecked="{Binding Muted, Mode=TwoWay}" Width="28" Height="26" FontWeight="Bold" />
+                                <ToggleButton DockPanel.Dock="Right"
+                                              Style="{StaticResource IconToggleButtonStyle}"
+                                              IsChecked="{Binding Muted, Mode=TwoWay}"
+                                              ToolTip="{DynamicResource Channel_MuteTooltip}">
+                                    <Path Width="15" Height="15" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.8">
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <Setter Property="Data" Value="{StaticResource Icon_Speaker}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Muted}" Value="True">
+                                                        <Setter Property="Data" Value="{StaticResource Icon_SpeakerMuted}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
+                                </ToggleButton>
+                                <Button DockPanel.Dock="Right"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        Command="{Binding DataContext.RefreshDevicesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        ToolTip="{DynamicResource Io_RefreshDevicesTooltip}"
+                                        Margin="0,0,6,0">
+                                    <Path Data="{StaticResource Icon_Refresh}" Width="14" Height="14" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.8" />
+                                </Button>
                                 <TextBlock Text="{DynamicResource Mixer_OutputCardTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </DockPanel>
                             <TextBlock Text="{DynamicResource Mixer_OutputCardDesc}" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0" />
@@ -338,7 +365,30 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,10,0">
                             <DockPanel>
-                                <ToggleButton DockPanel.Dock="Right" Content="{DynamicResource Channel_MuteShort}" IsChecked="{Binding Muted, Mode=TwoWay}" Width="28" Height="26" FontWeight="Bold" />
+                                <ToggleButton DockPanel.Dock="Right"
+                                              Style="{StaticResource IconToggleButtonStyle}"
+                                              IsChecked="{Binding Muted, Mode=TwoWay}"
+                                              ToolTip="{DynamicResource Channel_MuteTooltip}">
+                                    <Path Width="15" Height="15" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.8">
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <Setter Property="Data" Value="{StaticResource Icon_Mic}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Muted}" Value="True">
+                                                        <Setter Property="Data" Value="{StaticResource Icon_MicMuted}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
+                                </ToggleButton>
+                                <Button DockPanel.Dock="Right"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        Command="{Binding DataContext.RefreshDevicesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        ToolTip="{DynamicResource Io_RefreshDevicesTooltip}"
+                                        Margin="0,0,6,0">
+                                    <Path Data="{StaticResource Icon_Refresh}" Width="14" Height="14" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.8" />
+                                </Button>
                                 <TextBlock Text="{DynamicResource Mixer_InputCardTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </DockPanel>
                             <TextBlock Text="{DynamicResource Mixer_InputCardDesc}" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0" />

@@ -59,10 +59,47 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:Button Content="{DynamicResource Flyout_MicMute}"
-                               Command="{Binding ToggleMicMuteCommand}"
-                               Appearance="Secondary"
-                               Padding="14,6" />
+                    <Button Command="{Binding SelectNavCommand}"
+                            CommandParameter="4"
+                            Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                            Margin="0,0,10,0"
+                            Padding="10,6"
+                            Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border CornerRadius="14" Background="#2210B981" BorderBrush="#6610B981" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Data="{StaticResource Icon_Download}" Width="14" Height="14" Stretch="Uniform" Stroke="#34D399" StrokeThickness="1.8" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="{DynamicResource Update_BadgeAvailable}" FontSize="12" FontWeight="SemiBold" Foreground="#34D399" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <ToggleButton IsChecked="{Binding PrimaryMicChannel.Muted, Mode=TwoWay}"
+                                  Padding="12,6"
+                                  Cursor="Hand">
+                        <ToggleButton.Template>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="Bd" CornerRadius="8" Background="#16FFFFFF" BorderBrush="#26FFFFFF" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path x:Name="MicIcon" Data="{StaticResource Icon_Mic}" Width="14" Height="14" Stretch="Uniform" Stroke="#E2E8F0" StrokeThickness="1.8" Margin="0,0,7,0" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="MicText" Text="{DynamicResource Flyout_MicMute}" FontSize="12" FontWeight="SemiBold" Foreground="#E2E8F0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#33EF4444" />
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#EF4444" />
+                                        <Setter TargetName="MicIcon" Property="Data" Value="{StaticResource Icon_MicMuted}" />
+                                        <Setter TargetName="MicIcon" Property="Stroke" Value="#FCA5A5" />
+                                        <Setter TargetName="MicText" Property="Foreground" Value="#FCA5A5" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </ToggleButton.Template>
+                    </ToggleButton>
                 </StackPanel>
             </Grid>
         </Border>
@@ -124,11 +161,36 @@
                         </Style>
                     </ListBox.ItemContainerStyle>
 
-                    <ListBoxItem Content="{DynamicResource Nav_Mixer}" />
-                    <ListBoxItem Content="{DynamicResource Nav_MicStudio}" />
-                    <ListBoxItem Content="{DynamicResource Nav_AppRouting}" />
-                    <ListBoxItem Content="{DynamicResource Nav_Soundboard}" />
-                    <ListBoxItem Content="{DynamicResource Nav_Settings}" />
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon_Mixer}" Width="15" Height="15" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" StrokeThickness="1.8" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource Nav_Mixer}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon_Mic}" Width="15" Height="15" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" StrokeThickness="1.8" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource Nav_MicStudio}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon_Routing}" Width="15" Height="15" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" StrokeThickness="1.8" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource Nav_AppRouting}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon_Soundboard}" Width="15" Height="15" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" StrokeThickness="1.8" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource Nav_Soundboard}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon_Settings}" Width="15" Height="15" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" StrokeThickness="1.8" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource Nav_Settings}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ListBoxItem>
                 </ListBox>
             </Border>
 

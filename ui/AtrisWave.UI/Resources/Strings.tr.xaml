@@ -159,11 +159,15 @@
     <sys:String x:Key="Sb_Loop">Döngü</sys:String>
 
     <sys:String x:Key="Update_Title">Yazılım Güncellemeleri (GitHub Releases)</sys:String>
-    <sys:String x:Key="Update_Desc">Geçerli sürüm: v2.1.0-alpha</sys:String>
+    <sys:String x:Key="Update_Desc">Geçerli sürüm: v2.3.0-alpha</sys:String>
     <sys:String x:Key="Update_CheckBtn">Güncellemeleri Denetle</sys:String>
     <sys:String x:Key="Update_UpToDate">En güncel sürümü kullanıyorsunuz.</sys:String>
     <sys:String x:Key="Update_Available">Yeni sürüm mevcut:</sys:String>
-    <sys:String x:Key="Update_OpenRelease">Sürümü Aç</sys:String>
+    <sys:String x:Key="Update_OpenRelease">GitHub'da Gör</sys:String>
+    <sys:String x:Key="Update_BadgeAvailable">Güncelleme Mevcut</sys:String>
+    <sys:String x:Key="Update_DownloadInstall">İndir ve Kur</sys:String>
+    <sys:String x:Key="Update_Downloading">İndiriliyor ve SHA-256 doğrulanıyor...</sys:String>
+    <sys:String x:Key="Io_RefreshDevicesTooltip">Ses Aygıtlarını Yenile</sys:String>
 
     <sys:String x:Key="Flyout_Title">AtrisWave Hızlı Miks</sys:String>
     <sys:String x:Key="Flyout_QuickBusSwitch">A1 ↔ A2 Değiştir</sys:String>

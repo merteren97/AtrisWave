@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
@@ -31,6 +32,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer _micDspDebounceTimer;
     private bool _disposed;
     private bool _suppressSync;
+    private bool _isSyncingFromEngine;
+    private DateTime _lastAutoSyncUtc = DateTime.MinValue;
+    private int _autoSyncAttempts;
+    private string _updateLatestVersion = string.Empty;
+
+    public string CurrentAppVersion { get; } = ResolveAppVersion();
 
     public ObservableCollection<DynamicChannelModel> DynamicChannels { get; } =
     [
@@ -61,7 +68,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private DynamicChannelModel? _selectedDrawerChannel;
     [ObservableProperty] private string _updateStatusText = string.Empty;
     [ObservableProperty] private string _updateReleaseUrl = string.Empty;
+    [ObservableProperty] private string _updateInstallerUrl = string.Empty;
+    [ObservableProperty] private string _updateChecksumsUrl = string.Empty;
+    [ObservableProperty] private string _updateReleaseNotes = string.Empty;
     [ObservableProperty] private bool _isUpdateAvailable;
+    [ObservableProperty] private bool _canDownloadUpdate;
+    [ObservableProperty] private bool _isDownloadingUpdate;
+    [ObservableProperty] private double _updateDownloadProgress;
+    [ObservableProperty] private bool _isMicMuted;
 
     public event EventHandler? SpectrumUpdated;
 
@@ -179,8 +193,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         switch (e.PropertyName)
         {
-            case nameof(DynamicChannelModel.Volume):
             case nameof(DynamicChannelModel.Muted):
+                if (ch.IsHardwareInput)
+                {
+                    IsMicMuted = ch.Muted;
+                }
+                _ = _pipeClient.SetChannelDspAsync(ch.ChannelId, ch.Volume, ch.Muted, ch.Solo, ch.Pan);
+                break;
+            case nameof(DynamicChannelModel.Volume):
             case nameof(DynamicChannelModel.Solo):
             case nameof(DynamicChannelModel.Pan):
                 _ = _pipeClient.SetChannelDspAsync(ch.ChannelId, ch.Volume, ch.Muted, ch.Solo, ch.Pan);
@@ -263,11 +283,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 ? (EngineState)header.EngineState
                 : EngineState.Stopped;
 
+            bool wasConnected = IsEngineConnected;
             IsEngineConnected = state != EngineState.Stopped;
             EngineState = state;
             SampleRate = header.SampleRate > 0 ? header.SampleRate : 48000;
             BufferFrames = header.BufferFrames;
             CpuLoadPercent = header.CpuLoadPercent;
+
+            if (IsEngineConnected &&
+                (!wasConnected || (OutputDevices.Count == 0 && _autoSyncAttempts < 3 && (DateTime.UtcNow - _lastAutoSyncUtc).TotalSeconds >= 5.0)) &&
+                !_isSyncingFromEngine)
+            {
+                _ = SyncAllFromEngineAsync();
+            }
 
             foreach (DynamicChannelModel ch in DynamicChannels)
             {
@@ -309,6 +337,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         else if (IsEngineConnected)
         {
             IsEngineConnected = false;
+            _autoSyncAttempts = 0;
             EngineState = EngineState.Stopped;
             CpuLoadPercent = 0f;
             MicGainReductionNormalized = 0f;
@@ -548,6 +577,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        string[] savedBusIds = OutputBuses.Select(b => b.DeviceId).ToArray();
+        string[] savedChannelIds = DynamicChannels.Select(c => c.DeviceId).ToArray();
+
         _suppressSync = true;
         try
         {
@@ -564,11 +596,30 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     OutputDevices.Add(dev);
                 }
             }
+
+            for (int i = 0; i < OutputBuses.Count && i < savedBusIds.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(savedBusIds[i]))
+                {
+                    OutputBuses[i].DeviceId = savedBusIds[i];
+                }
+            }
+
+            for (int i = 0; i < DynamicChannels.Count && i < savedChannelIds.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(savedChannelIds[i]))
+                {
+                    DynamicChannels[i].DeviceId = savedChannelIds[i];
+                }
+            }
         }
         finally
         {
             _suppressSync = false;
         }
+
+        OnPropertyChanged(nameof(PrimaryOutputBus));
+        OnPropertyChanged(nameof(PrimaryMicChannel));
     }
 
     [RelayCommand]
@@ -605,6 +656,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             _suppressSync = false;
         }
 
+        IsMicMuted = PrimaryMicChannel?.Muted ?? false;
+        OnPropertyChanged(nameof(PrimaryOutputBus));
+        OnPropertyChanged(nameof(PrimaryMicChannel));
         UpdateHealthCheck();
     }
 
@@ -855,23 +909,77 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 IsEngineProcessRunning = true;
                 EngineActionKey = "Io_StopEngine";
-                await Task.Delay(300);
             }
         }
 
-        await RefreshDevicesAsync();
-        await RefreshV2MixerStateAsync();
-        await RefreshSessionsAsync();
-        await RefreshDriverStatusAsync();
-        await RefreshRoutingRulesAsync();
-
-        if (IsHealthWarning)
+        for (int attempt = 0; attempt < 25; attempt++)
         {
-            await AutoSetupDefaultsAsync();
+            ping = await _pipeClient.PingAsync();
+            if (ping.Ok)
+            {
+                break;
+            }
+
+            await Task.Delay(150);
         }
 
-        OnPropertyChanged(nameof(PrimaryOutputBus));
-        OnPropertyChanged(nameof(PrimaryMicChannel));
+        await SyncAllFromEngineAsync();
+        _ = CheckForUpdatesDelayedAsync();
+    }
+
+    private async Task SyncAllFromEngineAsync()
+    {
+        if (_isSyncingFromEngine)
+        {
+            return;
+        }
+
+        _isSyncingFromEngine = true;
+        _lastAutoSyncUtc = DateTime.UtcNow;
+        _autoSyncAttempts++;
+        try
+        {
+            await RefreshDevicesAsync();
+            await RefreshV2MixerStateAsync();
+            await RefreshSessionsAsync();
+            await RefreshDriverStatusAsync();
+            await RefreshRoutingRulesAsync();
+
+            if (IsHealthWarning)
+            {
+                await AutoSetupDefaultsAsync();
+            }
+
+            OnPropertyChanged(nameof(PrimaryOutputBus));
+            OnPropertyChanged(nameof(PrimaryMicChannel));
+        }
+        finally
+        {
+            _isSyncingFromEngine = false;
+        }
+    }
+
+    private async Task CheckForUpdatesDelayedAsync()
+    {
+        await Task.Delay(2000);
+        if (!_disposed)
+        {
+            await CheckForUpdatesAsync();
+        }
+    }
+
+    private static string ResolveAppVersion()
+    {
+        string? info = Assembly.GetEntryAssembly()?
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(info))
+        {
+            int plus = info.IndexOf('+');
+            return plus >= 0 ? info[..plus] : info;
+        }
+
+        return "2.3.0-alpha";
     }
 
     [RelayCommand]
@@ -930,25 +1038,67 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task CheckForUpdatesAsync()
     {
-        UpdateCheckResult res = await GitHubUpdateChecker.CheckForUpdatesAsync("2.1.0-alpha");
+        UpdateCheckResult res = await GitHubUpdateChecker.CheckForUpdatesAsync(CurrentAppVersion);
         if (!res.Success)
         {
             UpdateStatusText = res.Error ?? "Offline";
             IsUpdateAvailable = false;
+            CanDownloadUpdate = false;
             return;
         }
 
         IsUpdateAvailable = res.UpdateAvailable;
+        _updateLatestVersion = res.LatestVersion;
         UpdateReleaseUrl = res.ReleaseUrl;
+        UpdateInstallerUrl = res.InstallerDownloadUrl ?? string.Empty;
+        UpdateChecksumsUrl = res.ChecksumsDownloadUrl ?? string.Empty;
+        UpdateReleaseNotes = res.ReleaseNotes ?? string.Empty;
+        CanDownloadUpdate = res.UpdateAvailable && !string.IsNullOrWhiteSpace(UpdateInstallerUrl);
         UpdateStatusText = res.UpdateAvailable
             ? $"{LocalizationService.Instance.GetString("Update_Available")} {res.LatestVersion}"
             : LocalizationService.Instance.GetString("Update_UpToDate");
     }
 
     [RelayCommand]
+    private async Task DownloadAndInstallUpdateAsync()
+    {
+        if (IsDownloadingUpdate || string.IsNullOrWhiteSpace(UpdateInstallerUrl))
+        {
+            return;
+        }
+
+        IsDownloadingUpdate = true;
+        UpdateDownloadProgress = 0;
+        UpdateStatusText = LocalizationService.Instance.GetString("Update_Downloading");
+
+        try
+        {
+            var progress = new Progress<double>(p => UpdateDownloadProgress = p * 100.0);
+            string tagForFile = string.IsNullOrWhiteSpace(_updateLatestVersion) ? CurrentAppVersion : _updateLatestVersion;
+            string installerPath = await AppUpdaterService.DownloadAndVerifyInstallerAsync(
+                UpdateInstallerUrl,
+                string.IsNullOrWhiteSpace(UpdateChecksumsUrl) ? null : UpdateChecksumsUrl,
+                tagForFile,
+                progress);
+
+            await ShutdownEngineOnExitAsync();
+            Process.Start(new ProcessStartInfo { FileName = installerPath, UseShellExecute = true });
+            Application.Current?.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusText = ex.Message;
+        }
+        finally
+        {
+            IsDownloadingUpdate = false;
+        }
+    }
+
+    [RelayCommand]
     private void OpenUpdateRelease()
     {
-        if (!string.IsNullOrWhiteSpace(UpdateReleaseUrl))
+        if (UpdateReleaseUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
         {
             Process.Start(new ProcessStartInfo { FileName = UpdateReleaseUrl, UseShellExecute = true });
         }

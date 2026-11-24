@@ -11,6 +11,7 @@
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
                 <ResourceDictionary Source="Resources/StudioTheme.xaml" />
+                <ResourceDictionary Source="Resources/Icons.xaml" />
                 <ResourceDictionary Source="Resources/Strings.en.xaml" />
             </ResourceDictionary.MergedDictionaries>
 

@@ -141,9 +141,25 @@
                         <TextBlock Text="{DynamicResource Update_Title}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4" />
                         <TextBlock Text="{DynamicResource Update_Desc}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,10" />
                         <StackPanel Orientation="Horizontal">
-                            <ui:Button Content="{DynamicResource Update_CheckBtn}" Command="{Binding CheckForUpdatesCommand}" Appearance="Primary" Margin="0,0,8,0" />
+                            <ui:Button Content="{DynamicResource Update_CheckBtn}" Command="{Binding CheckForUpdatesCommand}" Appearance="Secondary" Margin="0,0,8,0" />
+                            <ui:Button Command="{Binding DownloadAndInstallUpdateCommand}"
+                                       Visibility="{Binding CanDownloadUpdate, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       Appearance="Primary"
+                                       Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource Icon_Download}" Width="14" Height="14" Stretch="Uniform" Stroke="#F8FAFC" StrokeThickness="1.8" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="{DynamicResource Update_DownloadInstall}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </ui:Button>
                             <ui:Button Content="{DynamicResource Update_OpenRelease}" Command="{Binding OpenUpdateReleaseCommand}" Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}" Appearance="Secondary" />
                         </StackPanel>
+                        <ProgressBar Height="6"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="{Binding UpdateDownloadProgress}"
+                                     Foreground="#10B981"
+                                     Margin="0,10,0,0"
+                                     Visibility="{Binding IsDownloadingUpdate, Converter={StaticResource BoolToVisibilityConverter}}" />
                         <TextBlock Text="{Binding UpdateStatusText}" FontSize="12" Foreground="#38BDF8" Margin="0,8,0,0" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>

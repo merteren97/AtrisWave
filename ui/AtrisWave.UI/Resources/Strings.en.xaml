@@ -159,11 +159,15 @@
     <sys:String x:Key="Sb_Loop">Loop</sys:String>
 
     <sys:String x:Key="Update_Title">Software Updates (GitHub Releases)</sys:String>
-    <sys:String x:Key="Update_Desc">Current version: v2.1.0-alpha</sys:String>
+    <sys:String x:Key="Update_Desc">Current version: v2.3.0-alpha</sys:String>
     <sys:String x:Key="Update_CheckBtn">Check for Updates</sys:String>
     <sys:String x:Key="Update_UpToDate">You are on the latest version.</sys:String>
     <sys:String x:Key="Update_Available">New version available:</sys:String>
-    <sys:String x:Key="Update_OpenRelease">Open Release</sys:String>
+    <sys:String x:Key="Update_OpenRelease">View on GitHub</sys:String>
+    <sys:String x:Key="Update_BadgeAvailable">Update Available</sys:String>
+    <sys:String x:Key="Update_DownloadInstall">Download &amp; Install</sys:String>
+    <sys:String x:Key="Update_Downloading">Downloading &amp; verifying SHA-256...</sys:String>
+    <sys:String x:Key="Io_RefreshDevicesTooltip">Refresh Audio Devices</sys:String>
 
     <sys:String x:Key="Flyout_Title">AtrisWave Quick-Mix</sys:String>
     <sys:String x:Key="Flyout_QuickBusSwitch">Switch A1 ↔ A2</sys:String>

@@ -350,27 +350,36 @@ bool write_all_overlapped(HANDLE pipe, std::string_view data, HANDLE stop_event)
         return false;
     }
 
-    OVERLAPPED ov{};
-    ov.hEvent = write_event.get();
+    size_t total_written = 0;
+    while (total_written < data.size()) {
+        ResetEvent(write_event.get());
+        OVERLAPPED ov{};
+        ov.hEvent = write_event.get();
 
-    DWORD written = 0;
-    const BOOL ok = WriteFile(
-        pipe,
-        data.data(),
-        static_cast<DWORD>(data.size()),
-        &written,
-        &ov);
+        const DWORD remaining = static_cast<DWORD>(data.size() - total_written);
+        DWORD written = 0;
+        const BOOL ok = WriteFile(
+            pipe,
+            data.data() + total_written,
+            remaining,
+            &written,
+            &ov);
 
-    if (!ok) {
-        if (GetLastError() != ERROR_IO_PENDING) {
+        if (!ok) {
+            if (GetLastError() != ERROR_IO_PENDING) {
+                return false;
+            }
+            if (!wait_overlapped(pipe, ov, stop_event, written)) {
+                return false;
+            }
+        }
+        if (written == 0) {
             return false;
         }
-        if (!wait_overlapped(pipe, ov, stop_event, written)) {
-            return false;
-        }
+        total_written += static_cast<size_t>(written);
     }
 
-    return written == data.size();
+    return true;
 }
 
 std::string make_ok_response(uint64_t id, std::string_view result_json) {
@@ -463,7 +472,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.2.0-alpha\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.3.0-alpha\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -946,8 +955,8 @@ void ControlServer::server_loop() {
             PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
             PIPE_UNLIMITED_INSTANCES,
-            4096,
-            4096,
+            65536,
+            65536,
             0,
             &sa));
 
