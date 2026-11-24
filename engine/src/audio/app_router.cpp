@@ -1,0 +1,253 @@
+#include <atriswave/audio/app_router.hpp>
+#include <atriswave/audio/com_utils.hpp>
+
+#include <audiopolicy.h>
+#include <endpointvolume.h>
+#include <hstring.h>
+#include <mmdeviceapi.h>
+
+#include <filesystem>
+#include <string>
+
+namespace atriswave::audio {
+namespace {
+
+std::string query_process_exe_name(DWORD pid) {
+    if (pid == 0) {
+        return "System Sounds";
+    }
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (proc == nullptr) {
+        return "pid:" + std::to_string(pid);
+    }
+
+    wchar_t path_buf[MAX_PATH * 2]{};
+    DWORD size = static_cast<DWORD>(std::size(path_buf));
+    std::string result;
+    if (QueryFullProcessImageNameW(proc, 0, path_buf, &size) && size > 0) {
+        const std::filesystem::path p(std::wstring_view(path_buf, size));
+        result = wide_to_utf8(p.filename().wstring());
+    } else {
+        result = "pid:" + std::to_string(pid);
+    }
+    CloseHandle(proc);
+    return result;
+}
+
+// Undocumented Win10/11 IAudioPolicyConfigFactory COM interface vtable layout.
+// Probed safely via RoGetActivationFactory("Windows.Media.Internal.AudioPolicyConfig").
+struct IAudioPolicyConfigFactoryV21H2 : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetIids(ULONG*, IID**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetRuntimeClassName(HSTRING*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetTrustLevel(int*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved1() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved2() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved3() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved4() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved5() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved6() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved7() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved8() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved9() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved10() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved11() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved12() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved13() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved14() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved15() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved16() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved17() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved18() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved19() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved20() = 0;
+    virtual HRESULT STDMETHODCALLTYPE __reserved21() = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetPersistedDefaultAudioEndpoint(
+        DWORD processId,
+        EDataFlow flow,
+        ERole role,
+        HSTRING deviceId) = 0;
+};
+
+constexpr GUID kIidAudioPolicyConfigV2 = {
+    0xab3d4648, 0xe242, 0x459f, {0xb0, 0x2f, 0x54, 0x1c, 0x70, 0x30, 0x63, 0x24}};
+
+} // namespace
+
+std::vector<AudioSessionInfo> AppRouter::list_sessions() {
+    ScopedComInit com;
+    std::vector<AudioSessionInfo> sessions;
+    if (!com.ok()) {
+        return sessions;
+    }
+
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    if (FAILED(CoCreateInstance(
+            __uuidof(MMDeviceEnumerator),
+            nullptr,
+            CLSCTX_ALL,
+            __uuidof(IMMDeviceEnumerator),
+            enumerator.put_void())) ||
+        !enumerator) {
+        return sessions;
+    }
+
+    ComPtr<IMMDevice> default_render;
+    if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, default_render.put())) ||
+        !default_render) {
+        return sessions;
+    }
+
+    ComPtr<IAudioSessionManager2> session_mgr;
+    if (FAILED(default_render->Activate(
+            __uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, session_mgr.put_void())) ||
+        !session_mgr) {
+        return sessions;
+    }
+
+    ComPtr<IAudioSessionEnumerator> session_enum;
+    if (FAILED(session_mgr->GetSessionEnumerator(session_enum.put())) || !session_enum) {
+        return sessions;
+    }
+
+    int count = 0;
+    if (FAILED(session_enum->GetCount(&count)) || count <= 0) {
+        return sessions;
+    }
+
+    for (int i = 0; i < count; ++i) {
+        ComPtr<IAudioSessionControl> ctrl;
+        if (FAILED(session_enum->GetSession(i, ctrl.put())) || !ctrl) {
+            continue;
+        }
+
+        AudioSessionState state = AudioSessionStateExpired;
+        if (FAILED(ctrl->GetState(&state)) || state == AudioSessionStateExpired) {
+            continue;
+        }
+
+        ComPtr<IAudioSessionControl2> ctrl2;
+        if (FAILED(ctrl.as(ctrl2)) || !ctrl2) {
+            continue;
+        }
+
+        DWORD pid = 0;
+        if (FAILED(ctrl2->GetProcessId(&pid))) {
+            continue;
+        }
+
+        AudioSessionInfo info{};
+        info.pid = static_cast<uint32_t>(pid);
+        info.process_name = query_process_exe_name(pid);
+
+        LPWSTR raw_display = nullptr;
+        if (SUCCEEDED(ctrl->GetDisplayName(&raw_display)) && raw_display != nullptr) {
+            info.display_name = wide_to_utf8(raw_display);
+            CoTaskMemFree(raw_display);
+        }
+        if (info.display_name.empty()) {
+            info.display_name = info.process_name;
+        }
+
+        ComPtr<ISimpleAudioVolume> simple_vol;
+        if (SUCCEEDED(ctrl.as(simple_vol)) && simple_vol) {
+            float vol = 1.0f;
+            BOOL muted = FALSE;
+            if (SUCCEEDED(simple_vol->GetMasterVolume(&vol))) {
+                info.volume = vol;
+            }
+            if (SUCCEEDED(simple_vol->GetMute(&muted))) {
+                info.muted = (muted != FALSE);
+            }
+        }
+
+        ComPtr<IAudioMeterInformation> meter;
+        if (SUCCEEDED(ctrl.as(meter)) && meter) {
+            float peak = 0.0f;
+            if (SUCCEEDED(meter->GetPeakValue(&peak))) {
+                info.peak = peak;
+            }
+        }
+
+        sessions.push_back(std::move(info));
+    }
+
+    return sessions;
+}
+
+RouteResult AppRouter::route_app_to_device(uint32_t pid, const std::string& target_device_id) {
+    if (pid == 0) {
+        return {false, "unsupported", "Invalid target PID"};
+    }
+
+    HMODULE combase = LoadLibraryW(L"combase.dll");
+    if (combase == nullptr) {
+        return {false, "unsupported", "combase.dll unavailable"};
+    }
+
+    using RoGetActivationFactoryFn = HRESULT(WINAPI*)(HSTRING, REFIID, void**);
+    using WindowsCreateStringFn = HRESULT(WINAPI*)(LPCWSTR, UINT32, HSTRING*);
+    using WindowsDeleteStringFn = HRESULT(WINAPI*)(HSTRING);
+
+    auto ro_get_factory = reinterpret_cast<RoGetActivationFactoryFn>(
+        GetProcAddress(combase, "RoGetActivationFactory"));
+    auto win_create_str = reinterpret_cast<WindowsCreateStringFn>(
+        GetProcAddress(combase, "WindowsCreateString"));
+    auto win_delete_str = reinterpret_cast<WindowsDeleteStringFn>(
+        GetProcAddress(combase, "WindowsDeleteString"));
+
+    if (ro_get_factory == nullptr || win_create_str == nullptr || win_delete_str == nullptr) {
+        FreeLibrary(combase);
+        return {false, "unsupported", "WinRT activation exports unavailable"};
+    }
+
+    ScopedComInit com;
+    if (!com.ok()) {
+        FreeLibrary(combase);
+        return {false, "unsupported", "COM initialization failed"};
+    }
+
+    constexpr wchar_t kClassName[] = L"Windows.Media.Internal.AudioPolicyConfig";
+    HSTRING class_hstr = nullptr;
+    if (FAILED(win_create_str(kClassName, static_cast<UINT32>(std::size(kClassName) - 1), &class_hstr))) {
+        FreeLibrary(combase);
+        return {false, "unsupported", "Failed to create class HSTRING"};
+    }
+
+    ComPtr<IAudioPolicyConfigFactoryV21H2> factory;
+    const HRESULT hr = ro_get_factory(class_hstr, kIidAudioPolicyConfigV2, factory.put_void());
+    win_delete_str(class_hstr);
+
+    if (FAILED(hr) || !factory) {
+        FreeLibrary(combase);
+        return {false, "unsupported", "IAudioPolicyConfigFactory unavailable on this Windows build"};
+    }
+
+    const std::wstring wide_dev = utf8_to_wide(target_device_id);
+    HSTRING dev_hstr = nullptr;
+    if (!wide_dev.empty()) {
+        if (FAILED(win_create_str(wide_dev.c_str(), static_cast<UINT32>(wide_dev.size()), &dev_hstr))) {
+            factory.reset();
+            FreeLibrary(combase);
+            return {false, "unsupported", "Failed to create device HSTRING"};
+        }
+    }
+
+    const HRESULT hr_mm = factory->SetPersistedDefaultAudioEndpoint(
+        static_cast<DWORD>(pid), eRender, eMultimedia, dev_hstr);
+    const HRESULT hr_console = factory->SetPersistedDefaultAudioEndpoint(
+        static_cast<DWORD>(pid), eRender, eConsole, dev_hstr);
+
+    if (dev_hstr != nullptr) {
+        win_delete_str(dev_hstr);
+    }
+    factory.reset();
+    FreeLibrary(combase);
+
+    if (SUCCEEDED(hr_mm) && SUCCEEDED(hr_console)) {
+        return {true, "policy_config", "Routed process via IAudioPolicyConfigFactory"};
+    }
+
+    return {false, "unsupported", "SetPersistedDefaultAudioEndpoint rejected or unsupported"};
+}
+
+} // namespace atriswave::audio

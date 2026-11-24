@@ -55,11 +55,15 @@ public partial class App : Application
     private void OnTrayLanguageClick(object sender, RoutedEventArgs e)
         => _viewModel?.ToggleLanguageCommand.Execute(null);
 
-    private void OnTrayExitClick(object sender, RoutedEventArgs e)
+    private async void OnTrayExitClick(object sender, RoutedEventArgs e)
     {
         IsExiting = true;
         _trayIcon?.Dispose();
-        _viewModel?.Dispose();
+        if (_viewModel is not null)
+        {
+            await _viewModel.ShutdownEngineOnExitAsync();
+            _viewModel.Dispose();
+        }
         _mainWindow?.Close();
         Shutdown();
     }

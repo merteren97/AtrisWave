@@ -1,4 +1,4 @@
-#include <atriswave/control_server.hpp>
+#include <atriswave/audio/audio_engine.hpp>
 #include <atriswave/ipc_protocol.h>
 #include <atriswave/rt_safety.hpp>
 #include <atriswave/simper_svf.hpp>
@@ -14,16 +14,13 @@
 
 #include <windows.h>
 
-#include <atomic>
-#include <chrono>
 #include <cmath>
-#include <cstdint>
 #include <iostream>
 #include <string_view>
 
 namespace {
 
-constexpr const char* kEngineVersion = "0.1.0";
+constexpr const char* kEngineVersion = "0.2.0";
 HANDLE g_shutdown_event = nullptr;
 
 BOOL WINAPI console_ctrl_handler(DWORD ctrl_type) noexcept {
@@ -96,6 +93,7 @@ int run_self_test() {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    bool headless_test = false;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
         if (arg == "--version") {
@@ -104,6 +102,9 @@ int main(int argc, char* argv[]) {
         }
         if (arg == "--self-test") {
             return run_self_test();
+        }
+        if (arg == "--headless-test") {
+            headless_test = true;
         }
     }
 
@@ -115,62 +116,20 @@ int main(int argc, char* argv[]) {
     g_shutdown_event = shutdown_event;
     SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
 
-    atriswave::TelemetryPublisher telemetry;
-    if (!telemetry.open(ATRISWAVE_TELEMETRY_SHM_NAME_W)) {
-        std::cerr << "Failed to open telemetry shared memory\n";
+    atriswave::AudioEngine engine;
+    if (!engine.start(shutdown_event, headless_test)) {
+        std::cerr << "Failed to start AtrisWave AudioEngine\n";
+        SetConsoleCtrlHandler(console_ctrl_handler, FALSE);
+        g_shutdown_event = nullptr;
         CloseHandle(shutdown_event);
         return 1;
-    }
-
-    std::atomic<uint32_t> engine_state{ATRISWAVE_ENGINE_STATE_RUNNING};
-    constexpr uint32_t kSampleRate = 48000;
-    constexpr uint32_t kBufferFrames = 128;
-    constexpr uint32_t kChannelCount = 6;
-
-    atriswave::ControlServer control_server;
-    const bool server_started = control_server.start(
-        ATRISWAVE_PIPE_NAME_W,
-        [&]() {
-            atriswave::ControlServer::StatusSnapshot status{};
-            status.engine_state = engine_state.load(std::memory_order_acquire);
-            status.sample_rate = kSampleRate;
-            status.buffer_frames = kBufferFrames;
-            status.channel_count = kChannelCount;
-            return status;
-        },
-        [&]() {
-            SetEvent(shutdown_event);
-        });
-
-    if (!server_started) {
-        std::cerr << "Failed to start control named pipe server\n";
-        telemetry.close();
-        CloseHandle(shutdown_event);
-        return 1;
-    }
-
-    TelemetrySnapshot snapshot{};
-    snapshot.header.channel_count = kChannelCount;
-    snapshot.header.sample_rate = kSampleRate;
-    snapshot.header.buffer_frames = kBufferFrames;
-    for (uint32_t ch = 0; ch < kChannelCount; ++ch) {
-        snapshot.channels[ch].channel_id = ch;
-        snapshot.channels[ch].flags = ATRISWAVE_CHANNEL_FLAG_ACTIVE;
     }
 
     while (WaitForSingleObject(shutdown_event, 16) == WAIT_TIMEOUT) {
-        snapshot.header.engine_state = engine_state.load(std::memory_order_acquire);
-        snapshot.header.timestamp_qpc = atriswave::TelemetryPublisher::query_qpc();
-        telemetry.publish(snapshot);
+        engine.publish_telemetry_tick();
     }
 
-    engine_state.store(ATRISWAVE_ENGINE_STATE_STOPPED, std::memory_order_release);
-    snapshot.header.engine_state = ATRISWAVE_ENGINE_STATE_STOPPED;
-    snapshot.header.timestamp_qpc = atriswave::TelemetryPublisher::query_qpc();
-    telemetry.publish(snapshot);
-
-    control_server.stop();
-    telemetry.close();
+    engine.stop();
     SetConsoleCtrlHandler(console_ctrl_handler, FALSE);
     g_shutdown_event = nullptr;
     CloseHandle(shutdown_event);

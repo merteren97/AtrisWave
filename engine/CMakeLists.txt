@@ -13,6 +13,12 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../shared" "${CMAKE_CURRENT_BINARY
 add_library(atriswave_engine_core STATIC
     src/telemetry_publisher.cpp
     src/control_server.cpp
+    src/audio/wasapi_devices.cpp
+    src/audio/wasapi_stream.cpp
+    src/audio/process_loopback.cpp
+    src/audio/app_router.cpp
+    src/audio/config_store.cpp
+    src/audio/audio_engine.cpp
 )
 
 target_include_directories(atriswave_engine_core
@@ -25,6 +31,9 @@ target_link_libraries(atriswave_engine_core
         atriswave::shared
         avrt.lib
         advapi32.lib
+        ole32.lib
+        uuid.lib
+        propsys.lib
 )
 
 target_compile_definitions(atriswave_engine_core
@@ -64,4 +73,18 @@ target_link_libraries(atriswave_engine_tests
 add_test(
     NAME atriswave_engine_tests
     COMMAND atriswave_engine_tests
+)
+
+add_executable(atriswave_dsp_tests
+    tests/dsp_tests.cpp
+)
+
+target_link_libraries(atriswave_dsp_tests
+    PRIVATE
+        atriswave_engine_core
+)
+
+add_test(
+    NAME atriswave_dsp_tests
+    COMMAND atriswave_dsp_tests
 )

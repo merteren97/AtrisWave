@@ -11,6 +11,18 @@
     <sys:String x:Key="Status_PingEngine">Ping Engine</sys:String>
     <sys:String x:Key="Lang_ToggleLabel">EN / TR</sys:String>
 
+    <sys:String x:Key="Tab_StudioMixer">Studio Mixer</sys:String>
+    <sys:String x:Key="Tab_MicDsp">Mic DSP Studio</sys:String>
+    <sys:String x:Key="Tab_AppRouting">App Routing</sys:String>
+
+    <sys:String x:Key="Io_MicInput">Mic Input</sys:String>
+    <sys:String x:Key="Io_MonitorOutput">Monitor Output</sys:String>
+    <sys:String x:Key="Io_VirtualOutput">Virtual Cable Output</sys:String>
+    <sys:String x:Key="Io_VirtualBadge">Virtual</sys:String>
+    <sys:String x:Key="Io_RefreshDevices">Refresh</sys:String>
+    <sys:String x:Key="Io_LaunchEngine">Launch Engine</sys:String>
+    <sys:String x:Key="Io_StopEngine">Stop Engine</sys:String>
+
     <sys:String x:Key="Mixer_SectionTitle">Virtual Mixer Channels</sys:String>
     <sys:String x:Key="Mixer_SectionSubtitle">6-bus real-time routing &amp; 60 FPS telemetry metering</sys:String>
     <sys:String x:Key="Channel_Master">Master</sys:String>
@@ -24,24 +36,57 @@
     <sys:String x:Key="Channel_MuteTooltip">Mute Channel</sys:String>
     <sys:String x:Key="Channel_SoloTooltip">Solo Channel</sys:String>
     <sys:String x:Key="Channel_ClipLabel">CLIP</sys:String>
+    <sys:String x:Key="Channel_GrLabel">GR</sys:String>
 
     <sys:String x:Key="Dsp_SectionTitle">Microphone DSP Chain</sys:String>
-    <sys:String x:Key="Dsp_SectionSubtitle">Phase 1 Dual-Path Low-Latency Processing Preview</sys:String>
-    <sys:String x:Key="Dsp_Phase1Note">Ready to bind to engine pipe commands in Phase 1</sys:String>
+    <sys:String x:Key="Dsp_SectionSubtitle">Dual-Path Low-Latency Processing Studio</sys:String>
+    <sys:String x:Key="Dsp_Phase1Note">Live-wired to AtrisWaveEngine over Named Pipe</sys:String>
+    <sys:String x:Key="Dsp_EqCurveTitle">5-Band Parametric EQ Curve (20 Hz – 20 kHz)</sys:String>
+    <sys:String x:Key="Dsp_PresetLabel">Preset</sys:String>
+    <sys:String x:Key="Dsp_SavePreset">Save</sys:String>
+    <sys:String x:Key="Dsp_LoadPreset">Load</sys:String>
     <sys:String x:Key="Dsp_DirectMonitor_Name">Direct Monitor Sidetone</sys:String>
-    <sys:String x:Key="Dsp_DirectMonitor_Desc">Zero-jitter hardware/WASAPI sidetone path</sys:String>
-    <sys:String x:Key="Dsp_AiDenoise_Name">AI Denoise (DeepFilterNet3-LL)</sys:String>
-    <sys:String x:Key="Dsp_AiDenoise_Desc">Neural background noise suppression (~10 ms)</sys:String>
+    <sys:String x:Key="Dsp_DirectMonitor_Desc">Low-latency WASAPI sidetone (~6–12 ms)</sys:String>
+    <sys:String x:Key="Dsp_MonitorGain">Monitor Gain</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Name">AI / Spectral Denoise</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Desc">Adaptive background noise suppression</sys:String>
+    <sys:String x:Key="Dsp_DenoiseStrength">Denoise Strength</sys:String>
     <sys:String x:Key="Dsp_NoiseGate_Name">Noise Gate</sys:String>
     <sys:String x:Key="Dsp_NoiseGate_Desc">Adaptive threshold &amp; hysteresis attenuation</sys:String>
-    <sys:String x:Key="Dsp_ParametricEq_Name">Parametric EQ</sys:String>
-    <sys:String x:Key="Dsp_ParametricEq_Desc">6-band zero-latency biquad tone shaping</sys:String>
+    <sys:String x:Key="Dsp_GateThreshold">Gate Threshold (dB)</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Name">5-Band Parametric EQ</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Desc">Zero-delay feedback Simper SVF tone shaping</sys:String>
+    <sys:String x:Key="Dsp_EqHpf">HPF (Hz)</sys:String>
+    <sys:String x:Key="Dsp_EqLow">Low 120Hz (dB)</sys:String>
+    <sys:String x:Key="Dsp_EqMid1">Mid 1 (dB)</sys:String>
+    <sys:String x:Key="Dsp_EqMid2">Mid 2 (dB)</sys:String>
+    <sys:String x:Key="Dsp_EqHigh">High 8kHz (dB)</sys:String>
     <sys:String x:Key="Dsp_Compressor_Name">Compressor</sys:String>
     <sys:String x:Key="Dsp_Compressor_Desc">Broadcast dynamics leveling with soft knee</sys:String>
+    <sys:String x:Key="Dsp_CompThreshold">Threshold (dB)</sys:String>
+    <sys:String x:Key="Dsp_CompRatio">Ratio</sys:String>
+    <sys:String x:Key="Dsp_CompMakeup">Makeup (dB)</sys:String>
+    <sys:String x:Key="Dsp_DuckingTitle">Sidechain Game Ducking</sys:String>
+    <sys:String x:Key="Dsp_DuckingDesc">Automatically attenuates Game bus when Mic is active</sys:String>
+    <sys:String x:Key="Dsp_DuckingDepth">Ducking Depth (dB)</sys:String>
     <sys:String x:Key="Dsp_Reverb_Name">Reverb</sys:String>
     <sys:String x:Key="Dsp_Reverb_Desc">Stereo algorithmic room ambience</sys:String>
+    <sys:String x:Key="Dsp_ReverbWet">Wet Mix</sys:String>
+    <sys:String x:Key="Dsp_ReverbRoom">Room Size</sys:String>
+    <sys:String x:Key="Dsp_ReverbDamp">Damping</sys:String>
     <sys:String x:Key="Dsp_Limiter_Name">Brickwall Limiter</sys:String>
-    <sys:String x:Key="Dsp_Limiter_Desc">Lookahead peak ceiling protection (-0.5 dBTP)</sys:String>
+    <sys:String x:Key="Dsp_Limiter_Desc">Lookahead peak ceiling protection</sys:String>
+    <sys:String x:Key="Dsp_LimiterCeiling">Ceiling (dBTP)</sys:String>
+
+    <sys:String x:Key="Routing_Title">Per-App Audio Routing &amp; Loopback</sys:String>
+    <sys:String x:Key="Routing_Subtitle">Assign active Windows audio sessions to virtual endpoints or enable Process Loopback capture</sys:String>
+    <sys:String x:Key="Routing_RefreshSessions">Refresh Sessions</sys:String>
+    <sys:String x:Key="Routing_ColApp">Application</sys:String>
+    <sys:String x:Key="Routing_ColPid">PID</sys:String>
+    <sys:String x:Key="Routing_ColVolume">Volume</sys:String>
+    <sys:String x:Key="Routing_ColTargetDevice">Target Output Device</sys:String>
+    <sys:String x:Key="Routing_ColLoopback">Process Loopback</sys:String>
+    <sys:String x:Key="Routing_NoSessions">No active audio sessions detected. Launch or connect the engine and click Refresh.</sys:String>
 
     <sys:String x:Key="Tray_ShowMixer">Show Mixer</sys:String>
     <sys:String x:Key="Tray_MuteMic">Mute Microphone</sys:String>

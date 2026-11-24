@@ -5,13 +5,31 @@
                  xmlns:controls="clr-namespace:AtrisWave.UI.Controls"
                  xmlns:services="clr-namespace:AtrisWave.UI.Services"
                  Title="{DynamicResource App_Title}"
-                 Width="1240"
-                 Height="760"
-                 MinWidth="980"
-                 MinHeight="640"
+                 Width="1320"
+                 Height="820"
+                 MinWidth="1040"
+                 MinHeight="680"
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica">
+    <Window.Resources>
+        <DataTemplate x:Key="DeviceComboItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <Border Margin="0,0,6,0"
+                        Padding="5,1"
+                        CornerRadius="4"
+                        Background="#3306B6D4"
+                        Visibility="{Binding IsVirtual, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="{DynamicResource Io_VirtualBadge}"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="#22D3EE" />
+                </Border>
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -28,7 +46,7 @@
 
         <!-- Top Studio Status Bar -->
         <Border Grid.Row="1"
-                Margin="20,4,20,12"
+                Margin="20,4,20,10"
                 Padding="16,10"
                 CornerRadius="10"
                 Background="#18FFFFFF"
@@ -41,7 +59,6 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Brand + Badge -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="{DynamicResource App_Title}"
                                FontSize="18"
@@ -61,7 +78,6 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Status Pill + Sample Rate + Actions -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Padding="10,5"
                             Margin="0,0,10,0"
@@ -98,10 +114,22 @@
                                    VerticalAlignment="Center" />
                     </Border>
 
+                    <ui:Button Command="{Binding LaunchOrStopEngineCommand}"
+                               Margin="0,0,8,0"
+                               Appearance="Secondary"
+                               Padding="12,5">
+                        <ui:Button.Content>
+                            <MultiBinding Converter="{StaticResource LocKeyConverter}">
+                                <Binding Path="EngineActionKey" />
+                                <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
+                            </MultiBinding>
+                        </ui:Button.Content>
+                    </ui:Button>
+
                     <ui:Button Content="{DynamicResource Status_PingEngine}"
                                Command="{Binding PingEngineCommand}"
                                ToolTip="{Binding LastPingMessage}"
-                               Margin="0,0,8,0"
+                               Margin="0,0,6,0"
                                Appearance="Secondary"
                                Padding="12,5" />
 
@@ -110,7 +138,7 @@
                                Foreground="#94A3B8"
                                VerticalAlignment="Center"
                                Margin="0,0,10,0"
-                               MaxWidth="140"
+                               MaxWidth="110"
                                TextTrimming="CharacterEllipsis" />
 
                     <ui:Button Content="{DynamicResource Lang_ToggleLabel}"
@@ -121,236 +149,414 @@
             </Grid>
         </Border>
 
-        <!-- Main Workspace: 6-Channel Mixer + Mic DSP Preview -->
-        <Grid Grid.Row="2" Margin="20,0,20,20">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2.1*" />
-                <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="1.1*" />
-            </Grid.ColumnDefinitions>
-
-            <!-- Virtual Mixer Channels Panel -->
-            <Border Grid.Column="0"
-                    Padding="18"
-                    CornerRadius="12"
-                    Background="#14FFFFFF"
-                    BorderBrush="#22FFFFFF"
-                    BorderThickness="1">
-                <Grid>
+        <!-- 3-Tab Studio Shell -->
+        <TabControl Grid.Row="2"
+                    Margin="20,0,20,20"
+                    Background="Transparent"
+                    BorderThickness="0">
+            <!-- TAB 1: Studio Mixer -->
+            <TabItem Header="{DynamicResource Tab_StudioMixer}">
+                <Grid Margin="0,10,0,0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0" Margin="0,0,0,14">
-                        <TextBlock Text="{DynamicResource Mixer_SectionTitle}"
-                                   FontSize="16"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{DynamicResource Mixer_SectionSubtitle}"
-                                   FontSize="12"
-                                   Foreground="#94A3B8"
-                                   Margin="0,2,0,0" />
-                    </StackPanel>
+                    <!-- Hardware I/O Selector Strip -->
+                    <Border Grid.Row="0"
+                            Margin="0,0,0,12"
+                            Padding="14,10"
+                            CornerRadius="10"
+                            Background="#14FFFFFF"
+                            BorderBrush="#22FFFFFF"
+                            BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                    <ItemsControl Grid.Row="1" ItemsSource="{Binding Channels}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Rows="1" Columns="6" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="4,0"
-                                        Padding="10,12"
-                                        CornerRadius="10"
-                                        Background="#1A0F172A"
-                                        BorderBrush="#24FFFFFF"
-                                        BorderThickness="1">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{DynamicResource Io_MicInput}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
+                                <ComboBox ItemsSource="{Binding InputDevices}"
+                                          SelectedItem="{Binding SelectedInputDevice}"
+                                          ItemTemplate="{StaticResource DeviceComboItemTemplate}" />
+                            </StackPanel>
 
-                                        <!-- Accent Strip -->
-                                        <Border Grid.Row="0"
-                                                Height="3"
-                                                CornerRadius="2"
-                                                Margin="0,0,0,8"
-                                                Background="{Binding AccentHex, Converter={StaticResource HexToBrushConverter}}" />
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="{DynamicResource Io_MonitorOutput}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
+                                <ComboBox ItemsSource="{Binding OutputDevices}"
+                                          SelectedItem="{Binding SelectedMonitorDevice}"
+                                          ItemTemplate="{StaticResource DeviceComboItemTemplate}" />
+                            </StackPanel>
 
-                                        <!-- Channel Name -->
-                                        <TextBlock Grid.Row="1"
-                                                   HorizontalAlignment="Center"
-                                                   FontSize="13"
-                                                   FontWeight="SemiBold"
-                                                   Margin="0,0,0,10"
-                                                   TextTrimming="CharacterEllipsis">
-                                            <TextBlock.Text>
-                                                <MultiBinding Converter="{StaticResource LocKeyConverter}">
-                                                    <Binding Path="NameKey" />
-                                                    <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
-                                                </MultiBinding>
-                                            </TextBlock.Text>
-                                        </TextBlock>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="{DynamicResource Io_VirtualOutput}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
+                                <ComboBox ItemsSource="{Binding OutputDevices}"
+                                          SelectedItem="{Binding SelectedVirtualOutputDevice}"
+                                          ItemTemplate="{StaticResource DeviceComboItemTemplate}" />
+                            </StackPanel>
 
-                                        <!-- Vertical Fader + 60fps SkiaSharp VU Meter -->
-                                        <Grid Grid.Row="2" Margin="0,0,0,10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="28" />
-                                            </Grid.ColumnDefinitions>
+                            <ui:Button Grid.Column="6"
+                                       Content="{DynamicResource Io_RefreshDevices}"
+                                       Command="{Binding RefreshDevicesCommand}"
+                                       VerticalAlignment="Bottom"
+                                       Padding="14,7" />
+                        </Grid>
+                    </Border>
 
-                                            <Slider Grid.Column="0"
-                                                    Orientation="Vertical"
-                                                    Minimum="0"
-                                                    Maximum="1.25"
-                                                    Value="{Binding Volume, Mode=TwoWay}"
-                                                    HorizontalAlignment="Center"
-                                                    VerticalAlignment="Stretch"
-                                                    TickFrequency="0.25"
-                                                    IsMoveToPointEnabled="True" />
+                    <!-- 6 Virtual Mixer Channels -->
+                    <Border Grid.Row="1"
+                            Padding="18"
+                            CornerRadius="12"
+                            Background="#14FFFFFF"
+                            BorderBrush="#22FFFFFF"
+                            BorderThickness="1">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                                            <controls:VuMeterControl Grid.Column="1"
-                                                                     PeakLeft="{Binding PeakLeft}"
-                                                                     PeakRight="{Binding PeakRight}"
-                                                                     RmsLeft="{Binding RmsLeft}"
-                                                                     RmsRight="{Binding RmsRight}"
-                                                                     IsMuted="{Binding IsMuted}"
-                                                                     IsClipping="{Binding IsClipping}" />
-                                        </Grid>
+                            <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                                <TextBlock Text="{DynamicResource Mixer_SectionTitle}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="{DynamicResource Mixer_SectionSubtitle}"
+                                           FontSize="12"
+                                           Foreground="#94A3B8"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
 
-                                        <!-- dB Readout -->
-                                        <TextBlock Grid.Row="3"
-                                                   Text="{Binding VolumeDbText}"
-                                                   HorizontalAlignment="Center"
-                                                   FontFamily="Consolas"
-                                                   FontSize="11"
-                                                   Foreground="#CBD5E1"
-                                                   Margin="0,0,0,8" />
+                            <ItemsControl Grid.Row="1" ItemsSource="{Binding Channels}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="1" Columns="6" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="4,0"
+                                                Padding="10,12"
+                                                CornerRadius="10"
+                                                Background="#1A0F172A"
+                                                BorderBrush="#24FFFFFF"
+                                                BorderThickness="1">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="*" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
 
-                                        <!-- Mute / Solo Toggles -->
-                                        <UniformGrid Grid.Row="4" Rows="1" Columns="2">
-                                            <ToggleButton Content="{DynamicResource Channel_MuteShort}"
-                                                          IsChecked="{Binding IsMuted, Mode=TwoWay}"
-                                                          ToolTip="{DynamicResource Channel_MuteTooltip}"
-                                                          Margin="0,0,3,0"
-                                                          Height="30"
-                                                          FontWeight="Bold" />
-                                            <ToggleButton Content="{DynamicResource Channel_SoloShort}"
-                                                          IsChecked="{Binding IsSolo, Mode=TwoWay}"
-                                                          ToolTip="{DynamicResource Channel_SoloTooltip}"
-                                                          Margin="3,0,0,0"
-                                                          Height="30"
-                                                          FontWeight="Bold" />
-                                        </UniformGrid>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Grid>
-            </Border>
+                                                <Border Grid.Row="0"
+                                                        Height="3"
+                                                        CornerRadius="2"
+                                                        Margin="0,0,0,8"
+                                                        Background="{Binding AccentHex, Converter={StaticResource HexToBrushConverter}}" />
 
-            <!-- Right Panel: Phase 1 Dual-Path Microphone DSP Preview -->
-            <Border Grid.Column="2"
-                    Padding="18"
-                    CornerRadius="12"
-                    Background="#14FFFFFF"
-                    BorderBrush="#22FFFFFF"
-                    BorderThickness="1">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
-                        <TextBlock Text="{DynamicResource Dsp_SectionTitle}"
-                                   FontSize="16"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{DynamicResource Dsp_SectionSubtitle}"
-                                   FontSize="12"
-                                   Foreground="#94A3B8"
-                                   TextWrapping="Wrap"
-                                   Margin="0,2,0,0" />
-                    </StackPanel>
-
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding MicDspModules}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Margin="0,0,0,8"
-                                            Padding="12,10"
-                                            CornerRadius="8"
-                                            Background="#1A0F172A"
-                                            BorderBrush="#20FFFFFF"
-                                            BorderThickness="1">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-
-                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center">
-                                                        <TextBlock.Text>
-                                                            <MultiBinding Converter="{StaticResource LocKeyConverter}">
-                                                                <Binding Path="NameKey" />
-                                                                <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
-                                                            </MultiBinding>
-                                                        </TextBlock.Text>
-                                                    </TextBlock>
-                                                    <Border Margin="8,0,0,0"
-                                                            Padding="6,2"
-                                                            CornerRadius="4"
-                                                            Background="#2206B6D4">
-                                                        <TextBlock Text="{Binding BadgeText}"
-                                                                   FontSize="10"
-                                                                   FontWeight="Bold"
-                                                                   Foreground="#22D3EE" />
-                                                    </Border>
-                                                </StackPanel>
-                                                <TextBlock FontSize="11"
-                                                           Foreground="#94A3B8"
-                                                           TextWrapping="Wrap"
-                                                           Margin="0,3,0,0">
+                                                <TextBlock Grid.Row="1"
+                                                           HorizontalAlignment="Center"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,10"
+                                                           TextTrimming="CharacterEllipsis">
                                                     <TextBlock.Text>
                                                         <MultiBinding Converter="{StaticResource LocKeyConverter}">
-                                                            <Binding Path="DescriptionKey" />
+                                                            <Binding Path="NameKey" />
                                                             <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
                                                         </MultiBinding>
                                                     </TextBlock.Text>
                                                 </TextBlock>
-                                            </StackPanel>
 
-                                            <ui:ToggleSwitch Grid.Column="1"
-                                                             IsChecked="{Binding IsEnabled, Mode=TwoWay}"
-                                                             VerticalAlignment="Center" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                                                <Grid Grid.Row="2" Margin="0,0,0,10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="28" />
+                                                    </Grid.ColumnDefinitions>
 
-                    <Border Grid.Row="2"
-                            Margin="0,10,0,0"
-                            Padding="10,8"
-                            CornerRadius="6"
-                            Background="#1A38BDF8">
-                        <TextBlock Text="{DynamicResource Dsp_Phase1Note}"
-                                   FontSize="11"
-                                   Foreground="#BAE6FD"
-                                   TextWrapping="Wrap" />
+                                                    <Slider Grid.Column="0"
+                                                            Orientation="Vertical"
+                                                            Minimum="0"
+                                                            Maximum="1.25"
+                                                            Value="{Binding Volume, Mode=TwoWay}"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Stretch"
+                                                            TickFrequency="0.25"
+                                                            IsMoveToPointEnabled="True" />
+
+                                                    <controls:VuMeterControl Grid.Column="1"
+                                                                             PeakLeft="{Binding PeakLeft}"
+                                                                             PeakRight="{Binding PeakRight}"
+                                                                             RmsLeft="{Binding RmsLeft}"
+                                                                             RmsRight="{Binding RmsRight}"
+                                                                             IsMuted="{Binding IsMuted}"
+                                                                             IsClipping="{Binding IsClipping}" />
+                                                </Grid>
+
+                                                <TextBlock Grid.Row="3"
+                                                           Text="{Binding VolumeDbText}"
+                                                           HorizontalAlignment="Center"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           Foreground="#CBD5E1"
+                                                           Margin="0,0,0,8" />
+
+                                                <UniformGrid Grid.Row="4" Rows="1" Columns="2">
+                                                    <ToggleButton Content="{DynamicResource Channel_MuteShort}"
+                                                                  IsChecked="{Binding IsMuted, Mode=TwoWay}"
+                                                                  ToolTip="{DynamicResource Channel_MuteTooltip}"
+                                                                  Margin="0,0,3,0"
+                                                                  Height="30"
+                                                                  FontWeight="Bold" />
+                                                    <ToggleButton Content="{DynamicResource Channel_SoloShort}"
+                                                                  IsChecked="{Binding IsSolo, Mode=TwoWay}"
+                                                                  ToolTip="{DynamicResource Channel_SoloTooltip}"
+                                                                  Margin="3,0,0,0"
+                                                                  Height="30"
+                                                                  FontWeight="Bold" />
+                                                </UniformGrid>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Mic Gain Reduction Telemetry Bar -->
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="4,12,4,0">
+                                <TextBlock Text="{DynamicResource Channel_GrLabel}"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="#F59E0B"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0" />
+                                <ProgressBar Width="220"
+                                             Height="8"
+                                             Minimum="0"
+                                             Maximum="1"
+                                             Value="{Binding MicGainReductionNormalized}"
+                                             Foreground="#F59E0B"
+                                             VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </Grid>
-            </Border>
-        </Grid>
+            </TabItem>
+
+            <!-- TAB 2: Mic DSP Studio -->
+            <TabItem Header="{DynamicResource Tab_MicDsp}">
+                <Grid Margin="0,10,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="210" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Preset Bar -->
+                    <Border Grid.Row="0"
+                            Margin="0,0,0,10"
+                            Padding="14,8"
+                            CornerRadius="10"
+                            Background="#14FFFFFF"
+                            BorderBrush="#22FFFFFF"
+                            BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="{DynamicResource Dsp_EqCurveTitle}" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock Text="{DynamicResource Dsp_Phase1Note}" FontSize="11" Foreground="#94A3B8" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{DynamicResource Dsp_PresetLabel}" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#CBD5E1" />
+                                <ComboBox Width="180"
+                                          IsEditable="True"
+                                          ItemsSource="{Binding Presets}"
+                                          Text="{Binding PresetNameInput, Mode=TwoWay}"
+                                          Margin="0,0,8,0" />
+                                <ui:Button Content="{DynamicResource Dsp_SavePreset}" Command="{Binding SavePresetCommand}" Margin="0,0,6,0" />
+                                <ui:Button Content="{DynamicResource Dsp_LoadPreset}" Command="{Binding LoadPresetCommand}" Appearance="Primary" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Interactive 5-Band Parametric EQ Visualizer -->
+                    <Border Grid.Row="1"
+                            Margin="0,0,0,10"
+                            Padding="6"
+                            CornerRadius="10"
+                            Background="#14FFFFFF"
+                            BorderBrush="#22FFFFFF"
+                            BorderThickness="1">
+                        <controls:EqCurveControl Settings="{Binding MicDsp}" />
+                    </Border>
+
+                    <!-- DSP Module Parameter Cards -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <UniformGrid Columns="3">
+                            <!-- Card 1: Direct Monitor + Denoise -->
+                            <Border Margin="0,0,8,8" Padding="14" CornerRadius="10" Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,6">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.DirectMonitor, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_DirectMonitor_Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_DirectMonitor_Desc}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,6" />
+                                    <TextBlock Text="{DynamicResource Dsp_MonitorGain}" FontSize="11" />
+                                    <Slider Minimum="0" Maximum="1.5" Value="{Binding MicDsp.MonitorGain, Mode=TwoWay}" Margin="0,0,0,12" />
+
+                                    <DockPanel Margin="0,0,0,6">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.DenoiseEnabled, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_AiDenoise_Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_AiDenoise_Desc}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,6" />
+                                    <TextBlock Text="{DynamicResource Dsp_DenoiseStrength}" FontSize="11" />
+                                    <Slider Minimum="0" Maximum="1" Value="{Binding MicDsp.DenoiseStrength, Mode=TwoWay}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Card 2: Noise Gate + 5-Band EQ -->
+                            <Border Margin="4,0,4,8" Padding="14" CornerRadius="10" Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,6">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.GateEnabled, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_NoiseGate_Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_GateThreshold}" FontSize="11" />
+                                    <Slider Minimum="-80" Maximum="-10" Value="{Binding MicDsp.GateThresholdDb, Mode=TwoWay}" Margin="0,0,0,10" />
+
+                                    <DockPanel Margin="0,0,0,6">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.EqEnabled, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_ParametricEq_Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_EqHpf}" FontSize="11" />
+                                    <Slider Minimum="20" Maximum="300" Value="{Binding MicDsp.EqHpfHz, Mode=TwoWay}" />
+                                    <TextBlock Text="{DynamicResource Dsp_EqLow}" FontSize="11" />
+                                    <Slider Minimum="-15" Maximum="15" Value="{Binding MicDsp.EqLowDb, Mode=TwoWay}" />
+                                    <TextBlock Text="{DynamicResource Dsp_EqMid1}" FontSize="11" />
+                                    <Slider Minimum="-15" Maximum="15" Value="{Binding MicDsp.EqMid1Db, Mode=TwoWay}" />
+                                    <TextBlock Text="{DynamicResource Dsp_EqMid2}" FontSize="11" />
+                                    <Slider Minimum="-15" Maximum="15" Value="{Binding MicDsp.EqMid2Db, Mode=TwoWay}" />
+                                    <TextBlock Text="{DynamicResource Dsp_EqHigh}" FontSize="11" />
+                                    <Slider Minimum="-15" Maximum="15" Value="{Binding MicDsp.EqHighDb, Mode=TwoWay}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Card 3: Compressor + Ducking + Reverb + Limiter -->
+                            <Border Margin="8,0,0,8" Padding="14" CornerRadius="10" Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,4">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.CompEnabled, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_Compressor_Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_CompThreshold}" FontSize="11" />
+                                    <Slider Minimum="-45" Maximum="0" Value="{Binding MicDsp.CompThresholdDb, Mode=TwoWay}" />
+                                    <TextBlock Text="{DynamicResource Dsp_CompRatio}" FontSize="11" />
+                                    <Slider Minimum="1" Maximum="12" Value="{Binding MicDsp.CompRatio, Mode=TwoWay}" />
+                                    <TextBlock Text="{DynamicResource Dsp_CompMakeup}" FontSize="11" />
+                                    <Slider Minimum="0" Maximum="18" Value="{Binding MicDsp.CompMakeupDb, Mode=TwoWay}" Margin="0,0,0,8" />
+
+                                    <DockPanel Margin="0,0,0,4">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.DuckingEnabled, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_DuckingTitle}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_DuckingDepth}" FontSize="11" />
+                                    <Slider Minimum="-30" Maximum="0" Value="{Binding MicDsp.DuckingDepthDb, Mode=TwoWay}" Margin="0,0,0,8" />
+
+                                    <DockPanel Margin="0,0,0,4">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.ReverbEnabled, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_Reverb_Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_ReverbWet}" FontSize="11" />
+                                    <Slider Minimum="0" Maximum="1" Value="{Binding MicDsp.ReverbWet, Mode=TwoWay}" Margin="0,0,0,8" />
+
+                                    <DockPanel Margin="0,0,0,4">
+                                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding MicDsp.LimiterEnabled, Mode=TwoWay}" />
+                                        <TextBlock Text="{DynamicResource Dsp_Limiter_Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <TextBlock Text="{DynamicResource Dsp_LimiterCeiling}" FontSize="11" />
+                                    <Slider Minimum="-6" Maximum="0" Value="{Binding MicDsp.LimiterCeilingDb, Mode=TwoWay}" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 3: App Routing -->
+            <TabItem Header="{DynamicResource Tab_AppRouting}">
+                <Border Margin="0,10,0,0"
+                        Padding="18"
+                        CornerRadius="12"
+                        Background="#14FFFFFF"
+                        BorderBrush="#22FFFFFF"
+                        BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" Margin="0,0,0,14">
+                            <ui:Button DockPanel.Dock="Right"
+                                       Content="{DynamicResource Routing_RefreshSessions}"
+                                       Command="{Binding RefreshSessionsCommand}"
+                                       Appearance="Primary"
+                                       Padding="14,7" />
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Routing_Title}" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock Text="{DynamicResource Routing_Subtitle}" FontSize="12" Foreground="#94A3B8" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding AudioSessions}"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  IsReadOnly="False"
+                                  HeadersVisibility="Column"
+                                  Background="Transparent"
+                                  BorderThickness="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="{DynamicResource Routing_ColApp}" Binding="{Binding EffectiveLabel}" IsReadOnly="True" Width="2*" />
+                                <DataGridTextColumn Header="{DynamicResource Routing_ColPid}" Binding="{Binding Pid}" IsReadOnly="True" Width="90" />
+                                <DataGridTextColumn Header="{DynamicResource Routing_ColVolume}" Binding="{Binding Volume, StringFormat=P0}" IsReadOnly="True" Width="100" />
+                                <DataGridTemplateColumn Header="{DynamicResource Routing_ColTargetDevice}" Width="2*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ComboBox ItemsSource="{Binding DataContext.OutputDevices, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                      SelectedValue="{Binding TargetDeviceId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      SelectedValuePath="Id"
+                                                      DisplayMemberPath="Name"
+                                                      SelectionChanged="OnSessionDeviceSelectionChanged" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="{DynamicResource Routing_ColLoopback}" Width="140">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ui:ToggleSwitch IsChecked="{Binding LoopbackCapture, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             Command="{Binding DataContext.RouteAppCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                             CommandParameter="{Binding}"
+                                                             HorizontalAlignment="Center" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+        </TabControl>
     </Grid>
 </ui:FluentWindow>

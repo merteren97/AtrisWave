@@ -34,6 +34,14 @@ public partial class MainWindow : FluentWindow
     private void UpdateTelemetryState()
         => _viewModel.SetTelemetryActive(IsVisible && WindowState != WindowState.Minimized);
 
+    private void OnSessionDeviceSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: AtrisWave.Core.Models.AudioSessionInfo session })
+        {
+            _viewModel.RouteAppCommand.Execute(session);
+        }
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (Application.Current is App app && !app.IsExiting)

@@ -1,3 +1,5 @@
+#include <atriswave/audio/config_store.hpp>
+#include <atriswave/audio/wasapi_devices.hpp>
 #include <atriswave/control_server.hpp>
 #include <atriswave/ipc_protocol.h>
 #include <atriswave/rt_safety.hpp>
@@ -282,6 +284,20 @@ void test_control_server_roundtrip() {
     server.stop();
 }
 
+void test_audio_helpers() {
+    ATRIS_CHECK(atriswave::audio::WasapiDeviceEnumerator::is_virtual_device_name("CABLE Input (VB-Audio Virtual Cable)"),
+                "VB-Cable Input detected as virtual");
+    ATRIS_CHECK(atriswave::audio::WasapiDeviceEnumerator::is_virtual_device_name("AtrisWave Virtual Mic"),
+                "AtrisWave detected as virtual");
+    ATRIS_CHECK(!atriswave::audio::WasapiDeviceEnumerator::is_virtual_device_name("Realtek(R) Audio"),
+                "Realtek is not virtual");
+
+    ATRIS_CHECK(!atriswave::audio::ConfigStore::is_valid_preset_name(""), "Empty preset rejected");
+    ATRIS_CHECK(!atriswave::audio::ConfigStore::is_valid_preset_name("../evil"), "Path traversal rejected");
+    ATRIS_CHECK(!atriswave::audio::ConfigStore::is_valid_preset_name("sub/dir"), "Slash rejected");
+    ATRIS_CHECK(atriswave::audio::ConfigStore::is_valid_preset_name("Studio_Podcast-1"), "Valid preset accepted");
+}
+
 } // namespace
 
 int main() {
@@ -290,6 +306,7 @@ int main() {
     test_simper_svf();
     test_telemetry_roundtrip();
     test_control_server_roundtrip();
+    test_audio_helpers();
 
     if (g_failures == 0) {
         std::cout << "[atriswave_engine_tests] ALL TESTS PASSED\n";

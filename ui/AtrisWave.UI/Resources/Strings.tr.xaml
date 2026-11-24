@@ -11,6 +11,18 @@
     <sys:String x:Key="Status_PingEngine">Motoru Yokla</sys:String>
     <sys:String x:Key="Lang_ToggleLabel">TR / EN</sys:String>
 
+    <sys:String x:Key="Tab_StudioMixer">Stüdyo Mikseri</sys:String>
+    <sys:String x:Key="Tab_MicDsp">Mikrofon DSP Stüdyosu</sys:String>
+    <sys:String x:Key="Tab_AppRouting">Uygulama Yönlendirme</sys:String>
+
+    <sys:String x:Key="Io_MicInput">Mikrofon Girişi</sys:String>
+    <sys:String x:Key="Io_MonitorOutput">Kulaklık İzleme</sys:String>
+    <sys:String x:Key="Io_VirtualOutput">Sanal Kablo Çıkışı</sys:String>
+    <sys:String x:Key="Io_VirtualBadge">Sanal</sys:String>
+    <sys:String x:Key="Io_RefreshDevices">Yenile</sys:String>
+    <sys:String x:Key="Io_LaunchEngine">Motoru Başlat</sys:String>
+    <sys:String x:Key="Io_StopEngine">Motoru Durdur</sys:String>
+
     <sys:String x:Key="Mixer_SectionTitle">Sanal Mikser Kanalları</sys:String>
     <sys:String x:Key="Mixer_SectionSubtitle">6-veri yolu gerçek zamanlı yönlendirme ve 60 FPS telemetri ölçümü</sys:String>
     <sys:String x:Key="Channel_Master">Ana Çıkış</sys:String>
@@ -24,24 +36,57 @@
     <sys:String x:Key="Channel_MuteTooltip">Kanalı Sustur</sys:String>
     <sys:String x:Key="Channel_SoloTooltip">Kanalı Tekle (Solo)</sys:String>
     <sys:String x:Key="Channel_ClipLabel">AŞIM</sys:String>
+    <sys:String x:Key="Channel_GrLabel">KA</sys:String>
 
     <sys:String x:Key="Dsp_SectionTitle">Mikrofon DSP Zinciri</sys:String>
-    <sys:String x:Key="Dsp_SectionSubtitle">Faz 1 Çift Yollu Düşük Gecikmeli İşleme Önizlemesi</sys:String>
-    <sys:String x:Key="Dsp_Phase1Note">Faz 1'de motor boru hattı komutlarına bağlanmaya hazır</sys:String>
+    <sys:String x:Key="Dsp_SectionSubtitle">Çift Yollu Düşük Gecikmeli İşleme Stüdyosu</sys:String>
+    <sys:String x:Key="Dsp_Phase1Note">Named Pipe üzerinden AtrisWaveEngine ile canlı bağlı</sys:String>
+    <sys:String x:Key="Dsp_EqCurveTitle">5 Bantlı Parametrik EQ Eğrisi (20 Hz – 20 kHz)</sys:String>
+    <sys:String x:Key="Dsp_PresetLabel">Önayar</sys:String>
+    <sys:String x:Key="Dsp_SavePreset">Kaydet</sys:String>
+    <sys:String x:Key="Dsp_LoadPreset">Yükle</sys:String>
     <sys:String x:Key="Dsp_DirectMonitor_Name">Doğrudan Dinleme (Sidetone)</sys:String>
-    <sys:String x:Key="Dsp_DirectMonitor_Desc">Sıfır titreşimli donanım/WASAPI geri duyum yolu</sys:String>
-    <sys:String x:Key="Dsp_AiDenoise_Name">YZ Gürültü Engelleme (DeepFilterNet3-LL)</sys:String>
-    <sys:String x:Key="Dsp_AiDenoise_Desc">Yapay zeka tabanlı arka plan gürültü bastırma (~10 ms)</sys:String>
+    <sys:String x:Key="Dsp_DirectMonitor_Desc">Düşük gecikmeli WASAPI geri duyum (~6–12 ms)</sys:String>
+    <sys:String x:Key="Dsp_MonitorGain">Dinleme Kazancı</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Name">YZ / Spektral Gürültü Engelleme</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Desc">Uyarlanabilir arka plan gürültü bastırma</sys:String>
+    <sys:String x:Key="Dsp_DenoiseStrength">Bastırma Gücü</sys:String>
     <sys:String x:Key="Dsp_NoiseGate_Name">Gürültü Kapısı (Noise Gate)</sys:String>
     <sys:String x:Key="Dsp_NoiseGate_Desc">Uyarlanabilir eşik ve histerezis zayıflatma</sys:String>
-    <sys:String x:Key="Dsp_ParametricEq_Name">Parametrik Ekolayzır</sys:String>
-    <sys:String x:Key="Dsp_ParametricEq_Desc">6 bantlı sıfır gecikmeli biquad ton şekillendirme</sys:String>
+    <sys:String x:Key="Dsp_GateThreshold">Kapı Eşiği (dB)</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Name">5 Bantlı Parametrik Ekolayzır</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Desc">Sıfır gecikmeli Simper SVF ton şekillendirme</sys:String>
+    <sys:String x:Key="Dsp_EqHpf">HPF (Hz)</sys:String>
+    <sys:String x:Key="Dsp_EqLow">Alt 120Hz (dB)</sys:String>
+    <sys:String x:Key="Dsp_EqMid1">Orta 1 (dB)</sys:String>
+    <sys:String x:Key="Dsp_EqMid2">Orta 2 (dB)</sys:String>
+    <sys:String x:Key="Dsp_EqHigh">Üst 8kHz (dB)</sys:String>
     <sys:String x:Key="Dsp_Compressor_Name">Kompresör</sys:String>
     <sys:String x:Key="Dsp_Compressor_Desc">Yumuşak dizli yayın dinamik dengeleme</sys:String>
+    <sys:String x:Key="Dsp_CompThreshold">Eşik (dB)</sys:String>
+    <sys:String x:Key="Dsp_CompRatio">Oran</sys:String>
+    <sys:String x:Key="Dsp_CompMakeup">Telafi (dB)</sys:String>
+    <sys:String x:Key="Dsp_DuckingTitle">Yan Zincir Oyun Kısma (Ducking)</sys:String>
+    <sys:String x:Key="Dsp_DuckingDesc">Mikrofon aktifken Oyun kanalını otomatik kısar</sys:String>
+    <sys:String x:Key="Dsp_DuckingDepth">Kısma Derinliği (dB)</sys:String>
     <sys:String x:Key="Dsp_Reverb_Name">Yankı (Reverb)</sys:String>
     <sys:String x:Key="Dsp_Reverb_Desc">Stereo algoritmik oda akustiği</sys:String>
+    <sys:String x:Key="Dsp_ReverbWet">Islak Karışım</sys:String>
+    <sys:String x:Key="Dsp_ReverbRoom">Oda Boyutu</sys:String>
+    <sys:String x:Key="Dsp_ReverbDamp">Sönümleme</sys:String>
     <sys:String x:Key="Dsp_Limiter_Name">Sınırlayıcı (Brickwall Limiter)</sys:String>
-    <sys:String x:Key="Dsp_Limiter_Desc">Öngörülü tepe tavan koruması (-0.5 dBTP)</sys:String>
+    <sys:String x:Key="Dsp_Limiter_Desc">Öngörülü tepe tavan koruması</sys:String>
+    <sys:String x:Key="Dsp_LimiterCeiling">Tavan (dBTP)</sys:String>
+
+    <sys:String x:Key="Routing_Title">Uygulama Bazlı Ses Yönlendirme ve Loopback</sys:String>
+    <sys:String x:Key="Routing_Subtitle">Etkin Windows ses oturumlarını sanal uç noktalara atayın veya Süreç Loopback yakalamayı açın</sys:String>
+    <sys:String x:Key="Routing_RefreshSessions">Oturumları Yenile</sys:String>
+    <sys:String x:Key="Routing_ColApp">Uygulama</sys:String>
+    <sys:String x:Key="Routing_ColPid">PID</sys:String>
+    <sys:String x:Key="Routing_ColVolume">Ses</sys:String>
+    <sys:String x:Key="Routing_ColTargetDevice">Hedef Çıkış Aygıtı</sys:String>
+    <sys:String x:Key="Routing_ColLoopback">Süreç Loopback</sys:String>
+    <sys:String x:Key="Routing_NoSessions">Etkin ses oturumu bulunamadı. Motoru başlatıp Yenile'ye tıklayın.</sys:String>
 
     <sys:String x:Key="Tray_ShowMixer">Mikseri Göster</sys:String>
     <sys:String x:Key="Tray_MuteMic">Mikrofonu Sustur</sys:String>

@@ -1,6 +1,8 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using AtrisWave.Core.Models;
 
 namespace AtrisWave.Core.Ipc;
 
@@ -8,6 +10,24 @@ namespace AtrisWave.Core.Ipc;
 /// Response envelope returned by the native engine over the control pipe.
 /// </summary>
 public sealed record EnginePipeResponse(bool Ok, int Id, JsonElement? Payload, string? Error);
+
+public sealed record SetChannelRequest(
+    [property: JsonPropertyName("channel_id")] uint ChannelId,
+    [property: JsonPropertyName("volume")] float Volume,
+    [property: JsonPropertyName("muted")] bool Muted,
+    [property: JsonPropertyName("solo")] bool Solo);
+
+public sealed record SelectDevicesRequest(
+    [property: JsonPropertyName("input_id")] string? InputId,
+    [property: JsonPropertyName("monitor_id")] string? MonitorId,
+    [property: JsonPropertyName("output_id")] string? OutputId);
+
+public sealed record RouteAppRequest(
+    [property: JsonPropertyName("pid")] uint Pid,
+    [property: JsonPropertyName("target_device_id")] string TargetDeviceId,
+    [property: JsonPropertyName("loopback_capture")] bool LoopbackCapture);
+
+public sealed record PresetRequest([property: JsonPropertyName("name")] string Name);
 
 /// <summary>
 /// Async newline-delimited UTF-8 JSON client for the <c>AtrisWaveEngine</c> Named Pipe.
@@ -41,6 +61,106 @@ public sealed class EnginePipeClient : IDisposable
 
     public Task<EnginePipeResponse> ShutdownAsync(CancellationToken cancellationToken = default)
         => SendCommandAsync("shutdown", null, cancellationToken);
+
+    public async Task<IReadOnlyList<AudioDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync("list_devices", null, cancellationToken).ConfigureAwait(false);
+        if (!TryUnwrapResult(resp, out JsonElement result))
+        {
+            return [];
+        }
+
+        if (result.TryGetProperty("devices", out JsonElement devicesEl) && devicesEl.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<AudioDeviceInfo>>(devicesEl.GetRawText()) ?? [];
+        }
+
+        return [];
+    }
+
+    public async Task<IReadOnlyList<AudioSessionInfo>> ListSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync("list_sessions", null, cancellationToken).ConfigureAwait(false);
+        if (!TryUnwrapResult(resp, out JsonElement result))
+        {
+            return [];
+        }
+
+        if (result.TryGetProperty("sessions", out JsonElement sessionsEl) && sessionsEl.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<AudioSessionInfo>>(sessionsEl.GetRawText()) ?? [];
+        }
+
+        return [];
+    }
+
+    public Task<EnginePipeResponse> SetChannelAsync(
+        uint channelId,
+        float volume,
+        bool muted,
+        bool solo,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("set_channel", new SetChannelRequest(channelId, volume, muted, solo), cancellationToken);
+
+    public Task<EnginePipeResponse> SetMicDspAsync(MicDspSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return SendCommandAsync("set_mic_dsp", settings.ToWireDto(), cancellationToken);
+    }
+
+    public Task<EnginePipeResponse> SelectDevicesAsync(
+        string? inputId,
+        string? monitorId,
+        string? outputId,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("select_devices", new SelectDevicesRequest(inputId, monitorId, outputId), cancellationToken);
+
+    public Task<EnginePipeResponse> RouteAppAsync(
+        uint pid,
+        string targetDeviceId,
+        bool loopbackCapture,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("route_app", new RouteAppRequest(pid, targetDeviceId, loopbackCapture), cancellationToken);
+
+    public Task<EnginePipeResponse> SavePresetAsync(string name, CancellationToken cancellationToken = default)
+        => SendCommandAsync("save_preset", new PresetRequest(name), cancellationToken);
+
+    public Task<EnginePipeResponse> LoadPresetAsync(string name, CancellationToken cancellationToken = default)
+        => SendCommandAsync("load_preset", new PresetRequest(name), cancellationToken);
+
+    public async Task<IReadOnlyList<string>> ListPresetsAsync(CancellationToken cancellationToken = default)
+    {
+        EnginePipeResponse resp = await SendCommandAsync("list_presets", null, cancellationToken).ConfigureAwait(false);
+        if (!TryUnwrapResult(resp, out JsonElement result))
+        {
+            return [];
+        }
+
+        if (result.TryGetProperty("presets", out JsonElement presetsEl) && presetsEl.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<string>>(presetsEl.GetRawText()) ?? [];
+        }
+
+        return [];
+    }
+
+    private static bool TryUnwrapResult(EnginePipeResponse resp, out JsonElement result)
+    {
+        if (resp.Ok && resp.Payload is JsonElement root)
+        {
+            if (root.TryGetProperty("result", out JsonElement inner) && inner.ValueKind == JsonValueKind.Object)
+            {
+                result = inner;
+                return true;
+            }
+
+            result = root;
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
 
     /// <summary>
     /// Sends a single newline-delimited JSON command and awaits the single-line JSON response.

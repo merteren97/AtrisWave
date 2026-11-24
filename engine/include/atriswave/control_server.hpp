@@ -1,18 +1,59 @@
 #pragma once
 
+#include <atriswave/audio/app_router.hpp>
+#include <atriswave/audio/wasapi_devices.hpp>
 #include <atriswave/ipc_protocol.h>
 
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace atriswave {
 
+struct ChannelConfig {
+    uint32_t channel_id{0};
+    float volume{1.0f};
+    bool muted{false};
+    bool solo{false};
+};
+
+struct MicDspConfig {
+    bool direct_monitor{false};
+    float monitor_gain{1.0f};
+    bool denoise_enabled{true};
+    float denoise_strength{0.6f};
+    bool gate_enabled{true};
+    float gate_threshold_db{-45.0f};
+    bool eq_enabled{true};
+    float eq_hpf_hz{80.0f};
+    float eq_low_db{0.0f};
+    float eq_mid1_hz{400.0f};
+    float eq_mid1_db{0.0f};
+    float eq_mid2_hz{2500.0f};
+    float eq_mid2_db{0.0f};
+    float eq_high_db{0.0f};
+    bool comp_enabled{true};
+    float comp_threshold_db{-18.0f};
+    float comp_ratio{3.0f};
+    float comp_makeup_db{2.0f};
+    bool ducking_enabled{false};
+    float ducking_depth_db{-6.0f};
+    bool reverb_enabled{false};
+    float reverb_wet{0.15f};
+    float reverb_room{0.4f};
+    float reverb_damp{0.5f};
+    bool limiter_enabled{true};
+    float limiter_ceiling_db{-1.0f};
+};
+
 /// Non-RT Win32 Named Pipe control server (`\\.\pipe\AtrisWaveEngine`).
 /// Restricted to the current user via an explicit DACL (fails closed if DACL creation fails).
-/// Handles newline-delimited UTF-8 JSON commands: `ping`, `get_status`, `shutdown`.
+/// Rejects remote SMB clients (`PIPE_REJECT_REMOTE_CLIENTS`) and caps pending lines at 64 KiB.
 class ControlServer final {
 public:
     struct StatusSnapshot {
@@ -20,6 +61,26 @@ public:
         uint32_t sample_rate{48000};
         uint32_t buffer_frames{128};
         uint32_t channel_count{6};
+    };
+
+    class IControlHandler {
+    public:
+        virtual ~IControlHandler() = default;
+        [[nodiscard]] virtual StatusSnapshot get_status() = 0;
+        virtual void on_shutdown() = 0;
+        [[nodiscard]] virtual std::vector<audio::AudioDeviceInfo> list_devices() = 0;
+        [[nodiscard]] virtual std::vector<audio::AudioSessionInfo> list_sessions() = 0;
+        [[nodiscard]] virtual bool set_channel(const ChannelConfig& cfg) = 0;
+        [[nodiscard]] virtual bool set_mic_dsp(const MicDspConfig& cfg) = 0;
+        [[nodiscard]] virtual bool select_devices(const std::string& input_id,
+                                                  const std::string& monitor_id,
+                                                  const std::string& output_id) = 0;
+        [[nodiscard]] virtual audio::RouteResult route_app(uint32_t pid,
+                                                           const std::string& target_device_id,
+                                                           bool loopback_capture) = 0;
+        [[nodiscard]] virtual bool save_preset(const std::string& name) = 0;
+        [[nodiscard]] virtual std::optional<MicDspConfig> load_preset(const std::string& name) = 0;
+        [[nodiscard]] virtual std::vector<std::string> list_presets() = 0;
     };
 
     using StatusProvider = std::function<StatusSnapshot()>;
@@ -33,13 +94,14 @@ public:
     ControlServer(ControlServer&&) = delete;
     ControlServer& operator=(ControlServer&&) = delete;
 
-    /// Starts the named pipe server on a background thread.
-    /// Returns false if the pipe security descriptor cannot be constructed or thread fails to start.
+    /// Starts the named pipe server with a full Phase 1 `IControlHandler`.
+    [[nodiscard]] bool start(const wchar_t* pipe_name, IControlHandler* handler);
+
+    /// Legacy/Phase 0 overload with built-in ping/status/shutdown handler.
     [[nodiscard]] bool start(const wchar_t* pipe_name = ATRISWAVE_PIPE_NAME_W,
                              StatusProvider status_provider = {},
                              ShutdownCallback on_shutdown = {});
 
-    /// Signals the server to stop and joins the background thread.
     void stop();
 
     [[nodiscard]] bool is_running() const noexcept {
@@ -51,8 +113,8 @@ private:
     [[nodiscard]] std::string handle_command_line(const std::string& line, bool& should_shutdown);
 
     std::wstring pipe_name_;
-    StatusProvider status_provider_;
-    ShutdownCallback on_shutdown_;
+    std::unique_ptr<IControlHandler> owned_default_handler_;
+    IControlHandler* handler_{nullptr};
 
     void* stop_event_{nullptr};
     std::atomic<bool> running_{false};
