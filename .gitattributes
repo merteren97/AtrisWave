@@ -1,0 +1,40 @@
+# ==============================================================================
+# AtrisWave .gitattributes
+# ==============================================================================
+
+# Default text auto-detection
+* text=auto
+
+# Source code, docs, and config -> LF
+*.cs          text eol=lf
+*.cpp         text eol=lf
+*.hpp         text eol=lf
+*.h           text eol=lf
+*.c           text eol=lf
+*.xaml        text eol=lf
+*.md          text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.json        text eol=lf
+*.cmake       text eol=lf
+CMakeLists.txt text eol=lf
+.editorconfig text eol=lf
+.clang-format text eol=lf
+*.svg         text eol=lf
+
+# Windows project files & scripts -> CRLF
+*.sln         text eol=crlf
+*.csproj      text eol=crlf
+*.vcxproj     text eol=crlf
+*.inf         text eol=crlf
+*.ps1         text eol=crlf
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+
+# Binary assets & build artifacts
+*.png         binary
+*.ico         binary
+*.wav         binary
+*.dll         binary
+*.exe         binary
+*.sys         binary

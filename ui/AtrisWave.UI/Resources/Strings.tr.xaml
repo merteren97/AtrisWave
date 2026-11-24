@@ -1,0 +1,50 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <sys:String x:Key="App_Title">AtrisWave</sys:String>
+    <sys:String x:Key="App_Badge">STÜDYO MİKSERİ</sys:String>
+    <sys:String x:Key="Status_Connected">Motor Bağlı</sys:String>
+    <sys:String x:Key="Status_Standby">Motor Beklemede</sys:String>
+    <sys:String x:Key="Status_Degraded">Motor Kısıtlı</sys:String>
+    <sys:String x:Key="Status_SampleRateFormat">{0:N0} Hz • {1} örnek</sys:String>
+    <sys:String x:Key="Status_SampleRateOffline">48.000 Hz • Beklemede</sys:String>
+    <sys:String x:Key="Status_PingEngine">Motoru Yokla</sys:String>
+    <sys:String x:Key="Lang_ToggleLabel">TR / EN</sys:String>
+
+    <sys:String x:Key="Mixer_SectionTitle">Sanal Mikser Kanalları</sys:String>
+    <sys:String x:Key="Mixer_SectionSubtitle">6-veri yolu gerçek zamanlı yönlendirme ve 60 FPS telemetri ölçümü</sys:String>
+    <sys:String x:Key="Channel_Master">Ana Çıkış</sys:String>
+    <sys:String x:Key="Channel_Game">Oyun</sys:String>
+    <sys:String x:Key="Channel_Chat">Sohbet</sys:String>
+    <sys:String x:Key="Channel_Media">Medya</sys:String>
+    <sys:String x:Key="Channel_Aux">Yardımcı</sys:String>
+    <sys:String x:Key="Channel_Microphone">Mikrofon</sys:String>
+    <sys:String x:Key="Channel_MuteShort">S</sys:String>
+    <sys:String x:Key="Channel_SoloShort">T</sys:String>
+    <sys:String x:Key="Channel_MuteTooltip">Kanalı Sustur</sys:String>
+    <sys:String x:Key="Channel_SoloTooltip">Kanalı Tekle (Solo)</sys:String>
+    <sys:String x:Key="Channel_ClipLabel">AŞIM</sys:String>
+
+    <sys:String x:Key="Dsp_SectionTitle">Mikrofon DSP Zinciri</sys:String>
+    <sys:String x:Key="Dsp_SectionSubtitle">Faz 1 Çift Yollu Düşük Gecikmeli İşleme Önizlemesi</sys:String>
+    <sys:String x:Key="Dsp_Phase1Note">Faz 1'de motor boru hattı komutlarına bağlanmaya hazır</sys:String>
+    <sys:String x:Key="Dsp_DirectMonitor_Name">Doğrudan Dinleme (Sidetone)</sys:String>
+    <sys:String x:Key="Dsp_DirectMonitor_Desc">Sıfır titreşimli donanım/WASAPI geri duyum yolu</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Name">YZ Gürültü Engelleme (DeepFilterNet3-LL)</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Desc">Yapay zeka tabanlı arka plan gürültü bastırma (~10 ms)</sys:String>
+    <sys:String x:Key="Dsp_NoiseGate_Name">Gürültü Kapısı (Noise Gate)</sys:String>
+    <sys:String x:Key="Dsp_NoiseGate_Desc">Uyarlanabilir eşik ve histerezis zayıflatma</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Name">Parametrik Ekolayzır</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Desc">6 bantlı sıfır gecikmeli biquad ton şekillendirme</sys:String>
+    <sys:String x:Key="Dsp_Compressor_Name">Kompresör</sys:String>
+    <sys:String x:Key="Dsp_Compressor_Desc">Yumuşak dizli yayın dinamik dengeleme</sys:String>
+    <sys:String x:Key="Dsp_Reverb_Name">Yankı (Reverb)</sys:String>
+    <sys:String x:Key="Dsp_Reverb_Desc">Stereo algoritmik oda akustiği</sys:String>
+    <sys:String x:Key="Dsp_Limiter_Name">Sınırlayıcı (Brickwall Limiter)</sys:String>
+    <sys:String x:Key="Dsp_Limiter_Desc">Öngörülü tepe tavan koruması (-0.5 dBTP)</sys:String>
+
+    <sys:String x:Key="Tray_ShowMixer">Mikseri Göster</sys:String>
+    <sys:String x:Key="Tray_MuteMic">Mikrofonu Sustur</sys:String>
+    <sys:String x:Key="Tray_Language">Dil: TR / EN</sys:String>
+    <sys:String x:Key="Tray_Exit">AtrisWave'den Çık</sys:String>
+</ResourceDictionary>

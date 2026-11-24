@@ -1,0 +1,60 @@
+name: Bug Report
+description: Report a crash, audio glitch, routing issue, or UI bug in AtrisWave.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug in **AtrisWave**! Please fill out the details below so we can reproduce and fix the issue quickly.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      options:
+        - Audio Engine (engine/)
+        - Desktop UI (ui/)
+        - Shared IPC / Telemetry (shared/)
+        - Virtual Audio Driver (driver/)
+        - Build / CI / Installer
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Launch AtrisWaveEngine.exe
+        2. Open AtrisWave.UI
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: System & Audio Environment
+      description: Windows version, sample rate, audio interface / headset, and AtrisWave commit or version.
+      placeholder: |
+        - OS: Windows 11 24H2 (Build 26100)
+        - Sample Rate / Buffer: 48 kHz / 128 frames
+        - Audio Device: Focusrite Scarlett / USB Headset
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Error Output
+      description: Paste any relevant console output, crash details, or test failures.
+      render: shell

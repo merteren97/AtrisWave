@@ -1,0 +1,50 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <sys:String x:Key="App_Title">AtrisWave</sys:String>
+    <sys:String x:Key="App_Badge">STUDIO MIXER</sys:String>
+    <sys:String x:Key="Status_Connected">Engine Connected</sys:String>
+    <sys:String x:Key="Status_Standby">Engine Standby</sys:String>
+    <sys:String x:Key="Status_Degraded">Engine Degraded</sys:String>
+    <sys:String x:Key="Status_SampleRateFormat">{0:N0} Hz • {1} smp</sys:String>
+    <sys:String x:Key="Status_SampleRateOffline">48,000 Hz • Standby</sys:String>
+    <sys:String x:Key="Status_PingEngine">Ping Engine</sys:String>
+    <sys:String x:Key="Lang_ToggleLabel">EN / TR</sys:String>
+
+    <sys:String x:Key="Mixer_SectionTitle">Virtual Mixer Channels</sys:String>
+    <sys:String x:Key="Mixer_SectionSubtitle">6-bus real-time routing &amp; 60 FPS telemetry metering</sys:String>
+    <sys:String x:Key="Channel_Master">Master</sys:String>
+    <sys:String x:Key="Channel_Game">Game</sys:String>
+    <sys:String x:Key="Channel_Chat">Chat</sys:String>
+    <sys:String x:Key="Channel_Media">Media</sys:String>
+    <sys:String x:Key="Channel_Aux">Aux</sys:String>
+    <sys:String x:Key="Channel_Microphone">Microphone</sys:String>
+    <sys:String x:Key="Channel_MuteShort">M</sys:String>
+    <sys:String x:Key="Channel_SoloShort">S</sys:String>
+    <sys:String x:Key="Channel_MuteTooltip">Mute Channel</sys:String>
+    <sys:String x:Key="Channel_SoloTooltip">Solo Channel</sys:String>
+    <sys:String x:Key="Channel_ClipLabel">CLIP</sys:String>
+
+    <sys:String x:Key="Dsp_SectionTitle">Microphone DSP Chain</sys:String>
+    <sys:String x:Key="Dsp_SectionSubtitle">Phase 1 Dual-Path Low-Latency Processing Preview</sys:String>
+    <sys:String x:Key="Dsp_Phase1Note">Ready to bind to engine pipe commands in Phase 1</sys:String>
+    <sys:String x:Key="Dsp_DirectMonitor_Name">Direct Monitor Sidetone</sys:String>
+    <sys:String x:Key="Dsp_DirectMonitor_Desc">Zero-jitter hardware/WASAPI sidetone path</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Name">AI Denoise (DeepFilterNet3-LL)</sys:String>
+    <sys:String x:Key="Dsp_AiDenoise_Desc">Neural background noise suppression (~10 ms)</sys:String>
+    <sys:String x:Key="Dsp_NoiseGate_Name">Noise Gate</sys:String>
+    <sys:String x:Key="Dsp_NoiseGate_Desc">Adaptive threshold &amp; hysteresis attenuation</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Name">Parametric EQ</sys:String>
+    <sys:String x:Key="Dsp_ParametricEq_Desc">6-band zero-latency biquad tone shaping</sys:String>
+    <sys:String x:Key="Dsp_Compressor_Name">Compressor</sys:String>
+    <sys:String x:Key="Dsp_Compressor_Desc">Broadcast dynamics leveling with soft knee</sys:String>
+    <sys:String x:Key="Dsp_Reverb_Name">Reverb</sys:String>
+    <sys:String x:Key="Dsp_Reverb_Desc">Stereo algorithmic room ambience</sys:String>
+    <sys:String x:Key="Dsp_Limiter_Name">Brickwall Limiter</sys:String>
+    <sys:String x:Key="Dsp_Limiter_Desc">Lookahead peak ceiling protection (-0.5 dBTP)</sys:String>
+
+    <sys:String x:Key="Tray_ShowMixer">Show Mixer</sys:String>
+    <sys:String x:Key="Tray_MuteMic">Mute Microphone</sys:String>
+    <sys:String x:Key="Tray_Language">Language: EN / TR</sys:String>
+    <sys:String x:Key="Tray_Exit">Exit AtrisWave</sys:String>
+</ResourceDictionary>

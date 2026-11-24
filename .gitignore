@@ -1,0 +1,122 @@
+# ==============================================================================
+# AtrisWave .gitignore
+# ==============================================================================
+
+# Visual Studio & MSBuild
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.VC.VC.opendb
+*.ipch
+*.aps
+*.ncb
+*.opt
+*.plg
+*.bsc
+*.sbr
+ipch/
+UpgradeLog*.XML
+_UpgradeReport_Files/
+
+# .NET / C# / WPF
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+[Dd]ebugPublic/
+[Rr]eleasePublic/
+x64/
+x86/
+ARM64/
+ARM/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.nupkg
+*.snupkg
+*.vsidx
+*.cache
+project.lock.json
+project.fragment.lock.json
+artifacts/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# C++ / CMake / Ninja
+build/
+out/
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+install_manifest.txt
+compile_commands.json
+*.ninja
+.ninja_deps
+.ninja_log
+
+# Windows Driver Kit (WDK) & Kernel Artifacts
+*.sys
+*.cat
+*.cer
+*.pfx
+*.pvk
+*.spc
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.obj
+*.res
+*.tlog
+*.lastbuildstate
+*.unsuccessfulbuild
+*.cod
+*.asm
+*.tmh
+*.etl
+Package/
+Win32/
+
+# Rust / Cargo (future plugin/DSP modules)
+target/
+Cargo.lock
+
+# JetBrains Rider / CLion / ReSharper
+.idea/
+*.sln.iml
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Windows OS & Misc Junk
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.tmp
+*.bak
+*.swp
+*~

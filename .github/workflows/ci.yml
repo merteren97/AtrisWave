@@ -1,0 +1,63 @@
+name: AtrisWave CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-engine:
+    name: Build & Test C++20 Engine
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: engine
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure CMake (msvc-release)
+        run: cmake --preset msvc-release
+
+      - name: Build Engine (Release)
+        run: cmake --build --preset msvc-release
+
+      - name: Run Engine Tests (CTest)
+        run: ctest --preset msvc-release --output-on-failure
+
+  build-ui:
+    name: Build & Test .NET 10 WPF UI
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ui/AtrisWave.sln
+
+      - name: Build UI Solution (Release)
+        run: dotnet build ui/AtrisWave.sln --configuration Release --no-restore
+
+      - name: Run UI & Core Tests
+        run: dotnet test ui/AtrisWave.sln --configuration Release --no-build --verbosity normal
