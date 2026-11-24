@@ -1,14 +1,14 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
 PackageIdentifier: AtrisWave.AtrisWave
-PackageVersion: 1.0.0-rc1
+PackageVersion: 2.0.0-alpha
 PackageLocale: en-US
 Publisher: AtrisWave Contributors
-PublisherUrl: https://github.com/atriswave/AtrisWave
-PublisherSupportUrl: https://github.com/atriswave/AtrisWave/issues
+PublisherUrl: https://github.com/merteren97/AtrisWave
+PublisherSupportUrl: https://github.com/merteren97/AtrisWave/issues
 PackageName: AtrisWave
-PackageUrl: https://github.com/atriswave/AtrisWave
+PackageUrl: https://github.com/merteren97/AtrisWave
 License: Apache-2.0
-LicenseUrl: https://github.com/atriswave/AtrisWave/blob/main/LICENSE
+LicenseUrl: https://github.com/merteren97/AtrisWave/blob/main/LICENSE
 Copyright: Copyright 2026 AtrisWave Contributors
 ShortDescription: Native open-source Windows audio suite with virtual channel splitting, per-app routing, real-time mic DSP, and sandboxed CLAP/VST3 hosting.
 Tags:
@@ -30,7 +30,7 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/atriswave/AtrisWave/releases/download/v1.0.0-rc1/AtrisWave-Setup-1.0.0-rc1-win-x64.exe
+    InstallerUrl: https://github.com/merteren97/AtrisWave/releases/download/v2.0.0-alpha/AtrisWave-Setup-2.0.0-alpha-win-x64.exe
     InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
 ManifestType: singleton
 ManifestVersion: 1.6.0

@@ -6,9 +6,11 @@
 ; ==============================================================================
 
 #define MyAppName "AtrisWave"
-#define MyAppVersion "1.0.0-rc1"
+#ifndef MyAppVersion
+  #define MyAppVersion "2.0.0-alpha"
+#endif
 #define MyAppPublisher "AtrisWave Contributors"
-#define MyAppURL "https://github.com/atriswave/AtrisWave"
+#define MyAppURL "https://github.com/merteren97/AtrisWave"
 #define MyAppExeName "AtrisWave.UI.exe"
 #define MyEngineExeName "AtrisWaveEngine.exe"
 #define MyWatchdogExeName "AtrisWaveWatchdog.exe"

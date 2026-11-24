@@ -120,3 +120,6 @@ $RECYCLE.BIN/
 *.bak
 *.swp
 *~
+
+# Staged release artifacts
+dist/

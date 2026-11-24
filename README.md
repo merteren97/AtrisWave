@@ -3,6 +3,8 @@ English | [Türkçe](README-TR.md)
 # AtrisWave
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/merteren97/AtrisWave/actions/workflows/ci.yml/badge.svg)](https://github.com/merteren97/AtrisWave/actions/workflows/ci.yml)
+[![Release](https://github.com/merteren97/AtrisWave/actions/workflows/release.yml/badge.svg)](https://github.com/merteren97/AtrisWave/releases)
 [![Platform: Windows 10/11](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6.svg)](#)
 [![Stack: .NET 10 WPF + C++20](https://img.shields.io/badge/Stack-.NET%2010%20WPF%20%2B%20C%2B%2B20-512BD4.svg)](#)
 
