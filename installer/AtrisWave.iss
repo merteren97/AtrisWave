@@ -7,7 +7,7 @@
 
 #define MyAppName "AtrisWave"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.0.0-alpha"
+  #define MyAppVersion "2.1.0-alpha"
 #endif
 #define MyAppPublisher "AtrisWave Contributors"
 #define MyAppURL "https://github.com/merteren97/AtrisWave"
@@ -40,6 +40,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 MinVersion=10.0.19041
+SetupIconFile=..\ui\AtrisWave.UI\Resources\atriswave.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]

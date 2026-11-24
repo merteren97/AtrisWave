@@ -29,6 +29,13 @@ public sealed class DynamicChannelModel : ObservableObject
     private float _gainReductionDb;
     private bool _isClipping;
     private bool _isActive;
+    private float _eqLowDb;
+    private float _eqMidDb;
+    private float _eqHighDb;
+    private bool _compEnabled;
+    private float _compThresholdDb = -18.0f;
+    private int _duckSourceId = -1;
+    private float _duckDepthDb = -12.0f;
 
     [JsonPropertyName("channel_id")]
     public uint ChannelId { get; set; }
@@ -156,6 +163,13 @@ public sealed class DynamicChannelModel : ObservableObject
     [JsonIgnore] public float GainReductionDb { get => _gainReductionDb; set => SetProperty(ref _gainReductionDb, value); }
     [JsonIgnore] public bool IsClipping { get => _isClipping; set => SetProperty(ref _isClipping, value); }
     [JsonIgnore] public bool IsActive { get => _isActive; set => SetProperty(ref _isActive, value); }
+    [JsonIgnore] public float EqLowDb { get => _eqLowDb; set => SetProperty(ref _eqLowDb, value); }
+    [JsonIgnore] public float EqMidDb { get => _eqMidDb; set => SetProperty(ref _eqMidDb, value); }
+    [JsonIgnore] public float EqHighDb { get => _eqHighDb; set => SetProperty(ref _eqHighDb, value); }
+    [JsonIgnore] public bool CompEnabled { get => _compEnabled; set => SetProperty(ref _compEnabled, value); }
+    [JsonIgnore] public float CompThresholdDb { get => _compThresholdDb; set => SetProperty(ref _compThresholdDb, value); }
+    [JsonIgnore] public int DuckSourceId { get => _duckSourceId; set => SetProperty(ref _duckSourceId, value); }
+    [JsonIgnore] public float DuckDepthDb { get => _duckDepthDb; set => SetProperty(ref _duckDepthDb, value); }
 
     [JsonIgnore]
     public string VolumeDbText

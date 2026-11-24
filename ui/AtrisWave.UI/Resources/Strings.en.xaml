@@ -131,6 +131,45 @@
     <sys:String x:Key="Bus_B2_Name">B2 Stream Mix</sys:String>
     <sys:String x:Key="Bus_B2_Desc">Virtual Stream Mix (OBS)</sys:String>
 
+    <sys:String x:Key="Nav_Mixer">Mixer</sys:String>
+    <sys:String x:Key="Nav_MicStudio">Mic DSP</sys:String>
+    <sys:String x:Key="Nav_AppRouting">Routing</sys:String>
+    <sys:String x:Key="Nav_Soundboard">Soundboard</sys:String>
+    <sys:String x:Key="Nav_ProAutomation">Pro &amp; API</sys:String>
+
+    <sys:String x:Key="Channel_FxTooltip">Channel DSP &amp; Sidechain Drawer</sys:String>
+    <sys:String x:Key="Drawer_Title">Channel DSP Strip</sys:String>
+    <sys:String x:Key="Drawer_Pan">Pan</sys:String>
+    <sys:String x:Key="Drawer_EqLow">Low</sys:String>
+    <sys:String x:Key="Drawer_EqMid">Mid</sys:String>
+    <sys:String x:Key="Drawer_EqHigh">High</sys:String>
+    <sys:String x:Key="Drawer_CompThresh">Comp Thresh</sys:String>
+    <sys:String x:Key="Drawer_CompShort">Comp</sys:String>
+    <sys:String x:Key="Drawer_DuckShort">Duck</sys:String>
+    <sys:String x:Key="Drawer_DuckSource">Sidechain Duck Source (-1 = Off)</sys:String>
+    <sys:String x:Key="Drawer_DuckDepth">Duck Depth</sys:String>
+    <sys:String x:Key="Drawer_SpectrumFocus">Analyze in FFT Spectrum</sys:String>
+    <sys:String x:Key="Drawer_Close">Close</sys:String>
+
+    <sys:String x:Key="Sb_Title">Studio WAV Soundboard</sys:String>
+    <sys:String x:Key="Sb_Subtitle">12-pad polyphonic WAV trigger deck (zero-alloc audio handoff)</sys:String>
+    <sys:String x:Key="Sb_StopAll">Stop All</sys:String>
+    <sys:String x:Key="Sb_BrowseWav">WAV...</sys:String>
+    <sys:String x:Key="Sb_Play">Play</sys:String>
+    <sys:String x:Key="Sb_Loop">Loop</sys:String>
+
+    <sys:String x:Key="Update_Title">Software Updates (GitHub Releases)</sys:String>
+    <sys:String x:Key="Update_Desc">Current version: v2.1.0-alpha</sys:String>
+    <sys:String x:Key="Update_CheckBtn">Check for Updates</sys:String>
+    <sys:String x:Key="Update_UpToDate">You are on the latest version.</sys:String>
+    <sys:String x:Key="Update_Available">New version available:</sys:String>
+    <sys:String x:Key="Update_OpenRelease">Open Release</sys:String>
+
+    <sys:String x:Key="Flyout_Title">AtrisWave Quick-Mix</sys:String>
+    <sys:String x:Key="Flyout_QuickBusSwitch">Switch A1 ↔ A2</sys:String>
+    <sys:String x:Key="Flyout_OpenStudio">Open AtrisWave Studio</sys:String>
+    <sys:String x:Key="Flyout_MicMute">Mic Mute</sys:String>
+
     <sys:String x:Key="Routing_Title">Per-App Audio Routing &amp; Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Assign active Windows audio sessions to virtual endpoints or enable Process Loopback capture</sys:String>
     <sys:String x:Key="Routing_RefreshSessions">Refresh Sessions</sys:String>

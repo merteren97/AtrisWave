@@ -7,17 +7,18 @@ namespace AtrisWave.Core.Tests;
 public sealed class TelemetryContractTests
 {
     [Fact]
-    public void Constants_MatchCAbiV2Specification()
+    public void Constants_MatchCAbiV3Specification()
     {
         Assert.Equal("AtrisWaveEngine", TelemetryConstants.PipeName);
-        Assert.Equal(@"Local\AtrisWaveTelemetryV2", TelemetryConstants.SharedMemoryName);
+        Assert.Equal(@"Local\AtrisWaveTelemetryV3", TelemetryConstants.SharedMemoryName);
         Assert.Equal(0x4157544Du, TelemetryConstants.Magic);
-        Assert.Equal(2u, TelemetryConstants.ProtocolVersion);
+        Assert.Equal(3u, TelemetryConstants.ProtocolVersion);
         Assert.Equal(16, TelemetryConstants.MaxChannels);
         Assert.Equal(4, TelemetryConstants.MaxBuses);
+        Assert.Equal(32, TelemetryConstants.SpectrumBins);
         Assert.Equal(64, TelemetryConstants.HeaderSizeBytes);
         Assert.Equal(32, TelemetryConstants.ChannelFrameSizeBytes);
-        Assert.Equal(704, TelemetryConstants.TotalSnapshotSizeBytes);
+        Assert.Equal(832, TelemetryConstants.TotalSnapshotSizeBytes);
     }
 
     [Fact]
@@ -35,7 +36,7 @@ public sealed class TelemetryContractTests
     }
 
     [Fact]
-    public void TelemetryHeader_SizeAndFieldOffsets_MatchCAbiV2()
+    public void TelemetryHeader_SizeAndFieldOffsets_MatchCAbiV3()
     {
         Assert.Equal(64, Marshal.SizeOf<TelemetryHeader>());
         Assert.Equal((nint)0, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.Magic)));
@@ -49,7 +50,7 @@ public sealed class TelemetryContractTests
         Assert.Equal((nint)40, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.CpuLoadPercent)));
         Assert.Equal((nint)44, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.XrunCount)));
         Assert.Equal((nint)48, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.BusCount)));
-        Assert.Equal((nint)52, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.Reserved1)));
+        Assert.Equal((nint)52, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.SpectrumBins)));
         Assert.Equal((nint)56, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.Reserved2)));
         Assert.Equal((nint)60, Marshal.OffsetOf<TelemetryHeader>(nameof(TelemetryHeader.Reserved3)));
     }

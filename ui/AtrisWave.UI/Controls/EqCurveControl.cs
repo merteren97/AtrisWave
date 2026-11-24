@@ -27,10 +27,22 @@ public sealed class EqCurveControl : SKElement
         typeof(EqCurveControl),
         new PropertyMetadata(null, OnSettingsChanged));
 
+    public static readonly DependencyProperty SpectrumDbProperty = DependencyProperty.Register(
+        nameof(SpectrumDb),
+        typeof(float[]),
+        typeof(EqCurveControl),
+        new PropertyMetadata(null, OnSpectrumChanged));
+
     public MicDspSettings? Settings
     {
         get => (MicDspSettings?)GetValue(SettingsProperty);
         set => SetValue(SettingsProperty, value);
+    }
+
+    public float[]? SpectrumDb
+    {
+        get => (float[]?)GetValue(SpectrumDbProperty);
+        set => SetValue(SpectrumDbProperty, value);
     }
 
     public event EventHandler? CurveEdited;
@@ -43,11 +55,15 @@ public sealed class EqCurveControl : SKElement
     private readonly SKPaint _nodeFillPaint = new() { Color = new SKColor(0x0F, 0x17, 0x2A), IsAntialias = true, Style = SKPaintStyle.Fill };
     private readonly SKPaint _nodeStrokePaint = new() { Color = new SKColor(0x22, 0xD3, 0xEE), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2f };
     private readonly SKPaint _nodeActivePaint = new() { Color = new SKColor(0x38, 0xBD, 0xF8), IsAntialias = true, Style = SKPaintStyle.Fill };
+    private readonly SKPaint _spectrumFillPaint = new() { Color = new SKColor(0xA8, 0x55, 0xF7, 0x35), IsAntialias = true, Style = SKPaintStyle.Fill };
+    private readonly SKPaint _spectrumStrokePaint = new() { Color = new SKColor(0xA8, 0x55, 0xF7, 0x95), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f };
     private readonly SKPaint _labelPaint = new() { Color = new SKColor(0x94, 0xA3, 0xB8), IsAntialias = true };
     private readonly SKFont _labelFont = new() { Size = 11f };
 
     private readonly SKPath _strokePath = new();
     private readonly SKPath _fillPath = new();
+    private readonly SKPath _spectrumStrokePath = new();
+    private readonly SKPath _spectrumFillPath = new();
 
     private int _draggedNode = -1;
     private float _lastWidth;
@@ -102,6 +118,11 @@ public sealed class EqCurveControl : SKElement
         ctrl.InvalidateVisual();
     }
 
+    private static void OnSpectrumChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => (d as EqCurveControl)?.InvalidateVisual();
+
+    public void RefreshSpectrum() => InvalidateVisual();
+
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         InvalidateVisual();
@@ -132,6 +153,11 @@ public sealed class EqCurveControl : SKElement
         canvas.DrawRoundRect(0, 0, width, height, 8f * _dpiScale, 8f * _dpiScale, _bgPaint);
 
         DrawGrid(canvas, pad, plotW, plotH);
+
+        if (SpectrumDb is { Length: > 1 } spectrum)
+        {
+            DrawSpectrum(canvas, spectrum, pad, plotW, plotH);
+        }
 
         MicDspSettings? settings = Settings;
         if (settings is null)
@@ -202,6 +228,40 @@ public sealed class EqCurveControl : SKElement
 
         canvas.DrawPath(_fillPath, _curveFillPaint);
         canvas.DrawPath(_strokePath, _curveStrokePaint);
+    }
+
+    private void DrawSpectrum(SKCanvas canvas, float[] spectrumDb, float pad, float plotW, float plotH)
+    {
+        _spectrumStrokePath.Reset();
+        _spectrumFillPath.Reset();
+        _spectrumStrokePaint.StrokeWidth = 1.4f * _dpiScale;
+
+        float bottomY = pad + plotH;
+        int n = spectrumDb.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double t = i / (double)(n - 1);
+            float x = pad + (float)(t * plotW);
+            double norm = Math.Clamp((spectrumDb[i] - (-90.0)) / 90.0, 0.0, 1.0);
+            float y = pad + (float)((1.0 - norm) * plotH);
+
+            if (i == 0)
+            {
+                _spectrumStrokePath.MoveTo(x, y);
+                _spectrumFillPath.MoveTo(x, bottomY);
+                _spectrumFillPath.LineTo(x, y);
+            }
+            else
+            {
+                _spectrumStrokePath.LineTo(x, y);
+                _spectrumFillPath.LineTo(x, y);
+            }
+        }
+
+        _spectrumFillPath.LineTo(pad + plotW, bottomY);
+        _spectrumFillPath.Close();
+        canvas.DrawPath(_spectrumFillPath, _spectrumFillPaint);
+        canvas.DrawPath(_spectrumStrokePath, _spectrumStrokePaint);
     }
 
     private void DrawNodes(SKCanvas canvas, MicDspSettings settings, float pad, float plotW, float plotH)

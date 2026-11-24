@@ -57,6 +57,11 @@ bool TelemetryPublisher::open(const wchar_t* shm_name) noexcept {
         std::memset(mapped_, 0, sizeof(TelemetrySnapshot));
         mapped_->header.magic = ATRISWAVE_TELEMETRY_MAGIC;
         mapped_->header.version = ATRISWAVE_TELEMETRY_VERSION;
+        mapped_->header.bus_count = ATRISWAVE_MAX_BUSES;
+        mapped_->header.spectrum_bins = ATRISWAVE_SPECTRUM_BINS;
+        for (uint32_t i = 0; i < ATRISWAVE_SPECTRUM_BINS; ++i) {
+            mapped_->spectrum_db[i] = -90.0f;
+        }
         std::atomic_ref<uint64_t> seq_ref(mapped_->header.sequence);
         seq_ref.store(0, std::memory_order_release);
     }
@@ -75,7 +80,8 @@ void TelemetryPublisher::close() noexcept {
     }
 }
 
-void TelemetryPublisher::publish(const TelemetrySnapshot& snapshot) noexcept {
+void TelemetryPublisher::publish(const TelemetrySnapshot& snapshot,
+                                 const float* spectrum_db) noexcept {
     if (mapped_ == nullptr) {
         return;
     }
@@ -98,10 +104,16 @@ void TelemetryPublisher::publish(const TelemetrySnapshot& snapshot) noexcept {
     mapped_->header.cpu_load_percent = snapshot.header.cpu_load_percent;
     mapped_->header.xrun_count = snapshot.header.xrun_count;
     mapped_->header.bus_count = snapshot.header.bus_count;
+    mapped_->header.spectrum_bins = ATRISWAVE_SPECTRUM_BINS;
     std::memcpy(mapped_->header.reserved, snapshot.header.reserved, sizeof(mapped_->header.reserved));
 
     std::memcpy(mapped_->channels, snapshot.channels, sizeof(mapped_->channels));
     std::memcpy(mapped_->buses, snapshot.buses, sizeof(mapped_->buses));
+    if (spectrum_db != nullptr) {
+        std::memcpy(mapped_->spectrum_db, spectrum_db, sizeof(mapped_->spectrum_db));
+    } else {
+        std::memcpy(mapped_->spectrum_db, snapshot.spectrum_db, sizeof(mapped_->spectrum_db));
+    }
 
     // Exit write section (even sequence)
     std::atomic_thread_fence(std::memory_order_release);

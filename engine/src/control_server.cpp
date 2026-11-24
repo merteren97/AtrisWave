@@ -125,6 +125,13 @@ public:
     }
     V2CommandResult auto_setup_defaults() override { return {false, "unsupported", 0}; }
 
+    SoundboardPlayResult play_soundboard(const std::string&, float, bool, bool, bool, bool) override {
+        return {};
+    }
+    bool stop_soundboard(int) override { return false; }
+    SoundboardStatus get_soundboard_status() override { return {}; }
+    V2CommandResult set_spectrum_source(uint32_t) override { return {false, "unsupported", 0}; }
+
 private:
     ControlServer::StatusProvider status_provider_;
     ControlServer::ShutdownCallback on_shutdown_;
@@ -456,7 +463,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.0.0-alpha\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.1.0-alpha\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -865,6 +872,52 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
             return make_err_response(id, res.error.empty() ? "auto_setup_failed" : res.error);
         }
         return make_ok_response(id, "{\"configured\":true}");
+    }
+
+    if (*cmd == "play_soundboard") {
+        const auto path = extract_json_string(line, "path");
+        if (!path.has_value() || path->empty()) {
+            return make_err_response(id, "invalid_wav");
+        }
+        const float gain = static_cast<float>(extract_json_number(line, "gain").value_or(1.0));
+        const bool send_a1 = extract_json_bool(line, "send_a1").value_or(true);
+        const bool send_b1 = extract_json_bool(line, "send_b1").value_or(true);
+        const bool send_b2 = extract_json_bool(line, "send_b2").value_or(true);
+        const bool loop = extract_json_bool(line, "loop").value_or(false);
+        const auto res = handler_->play_soundboard(*path, gain, send_a1, send_b1, send_b2, loop);
+        if (!res.playing) {
+            return make_err_response(id, "invalid_wav");
+        }
+        return make_ok_response(
+            id,
+            "{\"playing\":true,\"slot\":" + std::to_string(res.slot) +
+                ",\"duration_ms\":" + std::to_string(res.duration_ms) + "}");
+    }
+
+    if (*cmd == "stop_soundboard") {
+        const int slot = static_cast<int>(extract_json_number(line, "slot").value_or(-1.0));
+        const bool stopped = handler_->stop_soundboard(slot);
+        return make_ok_response(id, std::string("{\"stopped\":") + (stopped ? "true}" : "false}"));
+    }
+
+    if (*cmd == "get_soundboard_status") {
+        const auto st = handler_->get_soundboard_status();
+        return make_ok_response(
+            id,
+            "{\"active_voices\":" + std::to_string(st.active_voices) +
+                ",\"max_voices\":" + std::to_string(st.max_voices) + "}");
+    }
+
+    if (*cmd == "set_spectrum_source") {
+        const auto ch_id = extract_json_uint(line, "channel_id");
+        if (!ch_id.has_value()) {
+            return make_err_response(id, "missing_channel_id");
+        }
+        const auto res = handler_->set_spectrum_source(static_cast<uint32_t>(*ch_id));
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "invalid_channel_id" : res.error);
+        }
+        return make_ok_response(id, "{\"channel_id\":" + std::to_string(res.channel_id) + "}");
     }
 
     return make_err_response(id, "unknown_command");

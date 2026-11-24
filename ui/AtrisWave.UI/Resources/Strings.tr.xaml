@@ -131,6 +131,45 @@
     <sys:String x:Key="Bus_B2_Name">B2 Yayın Miksi</sys:String>
     <sys:String x:Key="Bus_B2_Desc">Sanal Yayın Çıkışı (OBS)</sys:String>
 
+    <sys:String x:Key="Nav_Mixer">Mikser</sys:String>
+    <sys:String x:Key="Nav_MicStudio">Mikrofon DSP</sys:String>
+    <sys:String x:Key="Nav_AppRouting">Yönlendirme</sys:String>
+    <sys:String x:Key="Nav_Soundboard">Ses Tahtası</sys:String>
+    <sys:String x:Key="Nav_ProAutomation">Pro ve API</sys:String>
+
+    <sys:String x:Key="Channel_FxTooltip">Kanal DSP ve Yan Zincir Çekmecesi</sys:String>
+    <sys:String x:Key="Drawer_Title">Kanal DSP Şeridi</sys:String>
+    <sys:String x:Key="Drawer_Pan">Pan</sys:String>
+    <sys:String x:Key="Drawer_EqLow">Alt</sys:String>
+    <sys:String x:Key="Drawer_EqMid">Orta</sys:String>
+    <sys:String x:Key="Drawer_EqHigh">Üst</sys:String>
+    <sys:String x:Key="Drawer_CompThresh">Komp. Eşiği</sys:String>
+    <sys:String x:Key="Drawer_CompShort">Komp</sys:String>
+    <sys:String x:Key="Drawer_DuckShort">Kıs</sys:String>
+    <sys:String x:Key="Drawer_DuckSource">Yan Zincir Kısma Kaynağı (-1 = Kapalı)</sys:String>
+    <sys:String x:Key="Drawer_DuckDepth">Kısma Derinliği</sys:String>
+    <sys:String x:Key="Drawer_SpectrumFocus">FFT Spektrumda İzle</sys:String>
+    <sys:String x:Key="Drawer_Close">Kapat</sys:String>
+
+    <sys:String x:Key="Sb_Title">Stüdyo WAV Ses Tahtası</sys:String>
+    <sys:String x:Key="Sb_Subtitle">12 pedli polifonik WAV tetikleyici (sıfır ayırmalı ses aktarımı)</sys:String>
+    <sys:String x:Key="Sb_StopAll">Tümünü Durdur</sys:String>
+    <sys:String x:Key="Sb_BrowseWav">WAV...</sys:String>
+    <sys:String x:Key="Sb_Play">Çal</sys:String>
+    <sys:String x:Key="Sb_Loop">Döngü</sys:String>
+
+    <sys:String x:Key="Update_Title">Yazılım Güncellemeleri (GitHub Releases)</sys:String>
+    <sys:String x:Key="Update_Desc">Geçerli sürüm: v2.1.0-alpha</sys:String>
+    <sys:String x:Key="Update_CheckBtn">Güncellemeleri Denetle</sys:String>
+    <sys:String x:Key="Update_UpToDate">En güncel sürümü kullanıyorsunuz.</sys:String>
+    <sys:String x:Key="Update_Available">Yeni sürüm mevcut:</sys:String>
+    <sys:String x:Key="Update_OpenRelease">Sürümü Aç</sys:String>
+
+    <sys:String x:Key="Flyout_Title">AtrisWave Hızlı Miks</sys:String>
+    <sys:String x:Key="Flyout_QuickBusSwitch">A1 ↔ A2 Değiştir</sys:String>
+    <sys:String x:Key="Flyout_OpenStudio">AtrisWave Stüdyo'yu Aç</sys:String>
+    <sys:String x:Key="Flyout_MicMute">Mikrofonu Sustur</sys:String>
+
     <sys:String x:Key="Routing_Title">Uygulama Bazlı Ses Yönlendirme ve Loopback</sys:String>
     <sys:String x:Key="Routing_Subtitle">Etkin Windows ses oturumlarını sanal uç noktalara atayın veya Süreç Loopback yakalamayı açın</sys:String>
     <sys:String x:Key="Routing_RefreshSessions">Oturumları Yenile</sys:String>

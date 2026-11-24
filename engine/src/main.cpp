@@ -21,7 +21,7 @@
 
 namespace {
 
-constexpr const char* kEngineVersion = "2.0.0-alpha";
+constexpr const char* kEngineVersion = "2.1.0-alpha";
 HANDLE g_shutdown_event = nullptr;
 
 BOOL WINAPI console_ctrl_handler(DWORD ctrl_type) noexcept {

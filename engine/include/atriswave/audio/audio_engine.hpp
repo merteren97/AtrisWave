@@ -11,6 +11,8 @@
 #include <atriswave/dsp/dynamic_mixer.hpp>
 #include <atriswave/dsp/mic_pipeline.hpp>
 #include <atriswave/dsp/pll_resampler.hpp>
+#include <atriswave/dsp/soundboard.hpp>
+#include <atriswave/dsp/spectrum_analyzer.hpp>
 #include <atriswave/spsc_ring_buffer.hpp>
 #include <atriswave/telemetry_publisher.hpp>
 
@@ -93,6 +95,17 @@ public:
                                                           uint32_t channel_id) override;
     [[nodiscard]] V2CommandResult auto_setup_defaults() override;
 
+    // v2.1 Soundboard & Spectrum Analyzer
+    [[nodiscard]] SoundboardPlayResult play_soundboard(const std::string& path,
+                                                       float gain,
+                                                       bool send_a1,
+                                                       bool send_b1,
+                                                       bool send_b2,
+                                                       bool loop) override;
+    [[nodiscard]] bool stop_soundboard(int slot) override;
+    [[nodiscard]] SoundboardStatus get_soundboard_status() override;
+    [[nodiscard]] V2CommandResult set_spectrum_source(uint32_t channel_id) override;
+
 private:
     struct StereoFrame {
         float l{0.0f};
@@ -106,6 +119,9 @@ private:
         SpscRingBuffer<StereoFrame, 4096> input_ring;
         dsp::AdaptivePllResampler pll_l;
         dsp::AdaptivePllResampler pll_r;
+        std::array<float, 16> leftover_l{};
+        std::array<float, 16> leftover_r{};
+        size_t leftover_count{0};
         std::atomic<bool> stream_active{false};
         audio::WasapiStream capture_stream;
         audio::ProcessLoopbackCapture loopback_capture;
@@ -140,8 +156,11 @@ private:
     void on_channel_loopback(uint32_t ch_idx, const float* data, uint32_t frames, uint32_t channels) noexcept;
     void on_bus_render(size_t bus_idx, float* data, uint32_t frames, uint32_t channels) noexcept;
 
+    void launch_watchdog_if_present() noexcept;
+
     void* shutdown_event_{nullptr};
     void* master_stop_event_{nullptr};
+    void* watchdog_process_{nullptr};
     std::atomic<bool> master_running_{false};
     std::thread master_thread_;
 
@@ -150,10 +169,17 @@ private:
 
     dsp::MicPipeline mic_pipeline_;
     dsp::DynamicMixer dynamic_mixer_;
+    dsp::SpectrumAnalyzer spectrum_analyzer_;
+    dsp::SoundboardEngine soundboard_;
+    std::atomic<uint32_t> spectrum_source_ch_{1};
 
     static constexpr size_t kMasterTickFrames = 480; // 10ms @ 48kHz
     std::array<std::vector<float>, dsp::kDynamicMaxChannels> ch_in_l_;
     std::array<std::vector<float>, dsp::kDynamicMaxChannels> ch_in_r_;
+    std::vector<float> pll_in_l_;
+    std::vector<float> pll_in_r_;
+    std::vector<float> pll_out_l_;
+    std::vector<float> pll_out_r_;
     std::vector<float> mic_mono_scratch_;
     std::vector<float> mic_mon_l_;
     std::vector<float> mic_mon_r_;

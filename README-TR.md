@@ -16,14 +16,15 @@
 
 - **Dinamik 16 Kanallı Raf (`+ Kanal Ekle`)**: Varsayılan *System* (genel yakalama) ve *Microphone* kanallarıyla başlayın veya sürükle-bırak uygulama bağlama, fader ve mute/solo kontrolleriyle 16 adede kadar sanal kanalı dinamik olarak ekleyin/yeniden adlandırın/silin.
 - **`A1 / A2 / B1 / B2` Donanım ve Sanal Çıkış Matrisi**: Her kanalı 4 ana çıkış veriyoluna (*A1/A2* fiziksel kulaklık/hoparlör, *B1/B2* sanal yayın/sohbet) bağımsız yönlendirin; kanal başı `-0.5 dBFS` lookahead limiter, **Geri Besleme Döngüsü Engelleyici** ve **Process Loopback `A1/A2` Yankı Kilidi** ile güvende kalın.
-- **Adanmış Yüksek Çözünürlüklü Ana Saat ve Failsafe Watchdog**: Akış başı `AdaptivePllResampler` ile 10 ms `CreateWaitableTimerExW` Ana Saat ve Windows varsayılan ses cihazını koruyan 3 katmanlı `AtrisWaveWatchdog.exe` failsafe koruması.
+- **Adanmış Yüksek Çözünürlüklü Ana Saat ve Otomatik Watchdog**: Tam stereo `AdaptivePllResampler` ile 10 ms `CreateWaitableTimerExW` Ana Saat ve motorla otomatik başlatılan `AtrisWaveWatchdog.exe` (3 katmanlı varsayılan cihaz failsafe koruması) sayesinde Windows sesi asla sanal cihazda mahsur kalmaz.
+- **12 Tuşlu Gerçek Zamanlı WAV Soundboard**: Özel `.wav` kliplerini doğrudan herhangi bir sanal mikse veya çıkış veriyoluna gerçek zamanlı tetikleyin.
 - **WASAPI `IAudioClient3` ve Uygulama Bazlı Yönlendirme**: **WASAPI Process Loopback** (`AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS`) ve kalıcı uygulama yönlendirme kuralları ile düşük gecikmeli Windows ses altyapısı.
 - **Tam Çift Yollu (Dual-Path) Mikrofon DSP'si**:
   - **Doğrudan Monitör (Sidetone)**: Ağır spektral/reverb aşamalarını atlayarak kendi sesinizi **~6–12 ms** (WASAPI `IAudioClient3`) gecikmeyle duyun.
-  - **Yayın Zinciri**: Spektral Gürültü Engelleyici, Noise Gate, 5 Bantlı Cytomic/Simper ZDF SVF Parametrik EQ (**AutoEq `.txt` içe aktarma** desteğiyle), Kompresör + **Sidechain Ducking**, Algoritmik + **FFT Konvolüsyon Reverb** (*Studio Booth*, *Broadcast Room*, *Concert Hall*), Gerçek Zamanlı **Pitch Shifter** (`-12 .. +12 st`) ve **True-Peak Limiter**.
+  - **Yayın Zinciri**: Spektral Gürültü Engelleyici, Noise Gate, 5 Bantlı Cytomic/Simper ZDF SVF Parametrik EQ (**AutoEq `.txt` içe aktarma** ve **Canlı 32 Bantlı FFT Spektrum Analizörü** ile), Kompresör + **Kanallar Arası Sidechain Ducking**, Algoritmik + **FFT Konvolüsyon Reverb** (*Studio Booth*, *Broadcast Room*, *Concert Hall*), Gerçek Zamanlı **Pitch Shifter** (`-12 .. +12 st`) ve **True-Peak Limiter**.
 - **Süreç Dışı Eklenti Koruması (`plugin-host/`)**: **CLAP** ve **VST3 (3.8+ MIT)** eklentilerini **5 ms çökme-baypas (crash-bypass)** korumalı izole `AtrisWavePluginHost.exe` sürecinde çalıştırın.
-- **Otomasyon ve Genel Kısayollar**: Yerel Win32 genel kısayolları (`Ctrl+Alt+M` Mikrofon Sessiz, `Ctrl+Alt+S` Sidetone) ve yalnızca loopback üzerinden çalışan Stream Deck / Touch Portal **JSON-RPC 2.0 API** (`http://127.0.0.1:18923/rpc`).
-- **60 FPS Stüdyo Arayüzü**: Bellek ayırmasız 60 FPS `SkiaSharp` VU metreler, canlı EQ eğrisi düzenleyicisi, sistem tepsisi Hızlı Miks menüsü ve anlık Türkçe / İngilizce dil desteği sunan modern Windows 11 koyu Fluent arayüz (`Wpf.Ui`).
+- **Otomasyon, Genel Kısayollar ve Güncelleme Denetleyicisi**: Yerel Win32 genel kısayolları (`Ctrl+Alt+M` Mikrofon Sessiz, `Ctrl+Alt+S` Sidetone), yalnızca loopback üzerinden çalışan Stream Deck / Touch Portal **JSON-RPC 2.0 API** (`http://127.0.0.1:18923/rpc`) ve GitHub Releases güncelleme denetleyicisi.
+- **60 FPS Obsidian Stüdyo Konsol Arayüzü (`v2.1.0-alpha`)**: Sol Fluent Gezinme Çubuğu (*Mikser*, *Mikrofon Stüdyosu*, *Uygulama Yönlendirme*, *Soundboard*, *Pro ve Otomasyon*), özel 60 FPS `SkiaSharp` **Döner Düğmeler (Rotary Knobs)**, **Konsol Fader'ları** ve **VU Metreler**, **Yandan Açılan Kanal DSP Çekmecesi**, **EarTrumpet Tarzı Hızlı Miks Tepsi Penceresi** (`A1 ↔ A2`), özel `atriswave.ico` simgesi ve anlık Türkçe / İngilizce dil desteği.
 
 ---
 
@@ -32,16 +33,16 @@
 AtrisWave; arayüz çizimini, gerçek zamanlı DSP işlemlerini, üçüncü parti eklenti yürütmesini ve çekirdek (kernel) ses uç noktalarını birbirinden ayırır (ayrıntılı teknik özellikler için [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) dosyasına bakın):
 
 ```text
-  [ C# .NET 10 WPF Arayüzü ] <── 704B Seqlock SHM V2 (60 FPS) ── [ C++20 Ses Motoru ]
+  [ C# .NET 10 WPF Arayüzü ] <── 832B Seqlock SHM V3 (60 FPS) ── [ C++20 Ses Motoru ]
    (ui/ — Wpf.Ui + Skia)      ── Named Pipe JSON Komutları ─────>  (engine/ — Session 1+)
                                                                      │       │       │
                                            5ms Çökme-Baypas SHM ─────┘       │       └── Doğrudan Ring / IOCTL
                                                    v                         v                  v
                                       [ AtrisWavePluginHost.exe ]     [ Watchdog.exe ]  [ AtrisWaveVAD.sys ]
-                                      (plugin-host/ — CLAP/VST3)      (Failsafe)        (driver/ — 16 Slot Havuzu)
+                                      (plugin-host/ — CLAP/VST3)      (Oto-Failsafe)    (driver/ — 16 Slot Havuzu)
 ```
 
-1. **Masaüstü Arayüzü (`ui/`)**: `Wpf.Ui` Fluent teması, `SkiaSharp.Views.WPF` (`SKElement`) 60 FPS metreler, `H.NotifyIcon.Wpf` sistem tepsisi, rehberli Ses Sağlığı Kontrolü, genel kısayollar ve loopback JSON-RPC sunucusu içeren C# `.NET 10` WPF uygulaması (`AtrisWave.UI.exe`).
+1. **Masaüstü Arayüzü (`ui/`)**: Sol Fluent Gezinme Çubuğu, özel 60 FPS `SkiaSharp` Döner Düğmeler / Konsol Fader'ları / VU Metreler / 32 bantlı FFT Spektrum EQ, Yandan Açılan Kanal DSP Çekmecesi, EarTrumpet tarzı Hızlı Miks Tepsi Penceresi, özel `atriswave.ico`, genel kısayollar, loopback JSON-RPC sunucusu ve GitHub Releases güncelleme denetleyicisi içeren C# `.NET 10` WPF Stüdyo Konsolu (`AtrisWave.UI.exe`).
 2. **Ses Motoru ve Failsafe (`engine/`)**: MMCSS `"Pro Audio"` öncelikli `CreateWaitableTimerExW` Ana Saati, FTZ/DAZ denormal temizleme, `AdaptivePllResampler`, kilitsiz SPSC halka tamponları ve `AtrisWaveWatchdog.exe` varsayılan cihaz failsafe koruması ile çalışan başsız **C++20** Session 1+ motoru (`AtrisWaveEngine.exe`).
 3. **Sanal Ses Sürücüsü (`driver/`)**: **16 slotlu `KSJACK_DESCRIPTION.IsConnected` havuzlu uç nokta** mimarisine ve RFC 3161 test imzalama / Attestation Signing betiklerine (`driver/scripts/build-and-testsign.ps1`) sahip C++ WDK **WaveRT / SysVAD** çekirdek sürücüsü (`AtrisWaveVAD.sys`).
 4. **Süreç Dışı Eklenti Barındırıcı (`plugin-host/`)**: Kilitsiz paylaşımlı bellek ses aktarımı ve otomatik 5 ms çökme-baypas koruması sunan izole C++20 **CLAP** ve **VST3 (3.8+)** eklenti barındırıcısı (`AtrisWavePluginHost.exe`).

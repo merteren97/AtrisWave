@@ -2,6 +2,8 @@
 #include <atriswave/audio/failsafe_watchdog.hpp>
 #include <atriswave/audio/wasapi_devices.hpp>
 #include <atriswave/dsp/dynamic_mixer.hpp>
+#include <atriswave/dsp/soundboard.hpp>
+#include <atriswave/dsp/spectrum_analyzer.hpp>
 #include <atriswave/ipc_protocol.h>
 #include <atriswave/telemetry_publisher.hpp>
 
@@ -20,6 +22,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -37,19 +40,22 @@ int g_failures = 0;
         }                                                                           \
     } while (false)
 
-void test_telemetry_v2_layout_and_roundtrip() {
-    ATRIS_CHECK(sizeof(TelemetrySnapshot) == 704, "Telemetry V2 size == 704 bytes");
+void test_telemetry_v3_layout_and_roundtrip() {
+    ATRIS_CHECK(sizeof(TelemetrySnapshot) == 832, "Telemetry V3 size == 832 bytes");
     ATRIS_CHECK(offsetof(TelemetryHeader, bus_count) == 48, "bus_count offset == 48");
+    ATRIS_CHECK(offsetof(TelemetryHeader, spectrum_bins) == 52, "spectrum_bins offset == 52");
     ATRIS_CHECK(offsetof(TelemetrySnapshot, buses) == 576, "buses offset == 576");
-    ATRIS_CHECK(ATRISWAVE_TELEMETRY_VERSION == 2u, "Telemetry version == 2");
+    ATRIS_CHECK(offsetof(TelemetrySnapshot, spectrum_db) == 704, "spectrum_db offset == 704");
+    ATRIS_CHECK(ATRISWAVE_TELEMETRY_VERSION == 3u, "Telemetry version == 3");
 
-    const wchar_t* shm = L"Local\\AtrisWaveTelemetryV2UnitTest";
+    const wchar_t* shm = L"Local\\AtrisWaveTelemetryV3UnitTest";
     atriswave::TelemetryPublisher pub;
-    ATRIS_CHECK(pub.open(shm), "TelemetryPublisher V2 open succeeds");
+    ATRIS_CHECK(pub.open(shm), "TelemetryPublisher V3 open succeeds");
 
     TelemetrySnapshot tx{};
     tx.header.channel_count = 3;
     tx.header.bus_count = 4;
+    tx.header.spectrum_bins = ATRISWAVE_SPECTRUM_BINS;
     tx.header.sample_rate = 48000;
     tx.header.buffer_frames = 480;
     tx.header.engine_state = ATRISWAVE_ENGINE_STATE_RUNNING;
@@ -59,21 +65,24 @@ void test_telemetry_v2_layout_and_roundtrip() {
     tx.buses[0].peak_left = 0.55f;
     tx.buses[3].channel_id = 3;
     tx.buses[3].peak_right = 0.42f;
-    pub.publish(tx);
+    tx.spectrum_db[15] = -12.5f;
+    pub.publish(tx, tx.spectrum_db);
 
     HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, shm);
-    ATRIS_CHECK(mapping != nullptr, "OpenFileMappingW V2 succeeds");
+    ATRIS_CHECK(mapping != nullptr, "OpenFileMappingW V3 succeeds");
     if (mapping != nullptr) {
         const void* view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, sizeof(TelemetrySnapshot));
-        ATRIS_CHECK(view != nullptr, "MapViewOfFile V2 succeeds");
+        ATRIS_CHECK(view != nullptr, "MapViewOfFile V3 succeeds");
         if (view != nullptr) {
             const auto* shared = static_cast<const TelemetrySnapshot*>(view);
             TelemetrySnapshot rx{};
             std::memcpy(&rx, shared, sizeof(TelemetrySnapshot));
-            ATRIS_CHECK(rx.header.version == 2u, "V2 version == 2");
-            ATRIS_CHECK(rx.header.bus_count == 4u, "V2 bus_count == 4");
+            ATRIS_CHECK(rx.header.version == 3u, "V3 version == 3");
+            ATRIS_CHECK(rx.header.bus_count == 4u, "V3 bus_count == 4");
+            ATRIS_CHECK(rx.header.spectrum_bins == 32u, "V3 spectrum_bins == 32");
             ATRIS_CHECK(std::fabs(rx.buses[0].peak_left - 0.55f) < 1e-6f, "Bus A1 peak_left matches");
             ATRIS_CHECK(std::fabs(rx.buses[3].peak_right - 0.42f) < 1e-6f, "Bus B2 peak_right matches");
+            ATRIS_CHECK(std::fabs(rx.spectrum_db[15] - (-12.5f)) < 1e-6f, "Spectrum bin 15 matches");
             UnmapViewOfFile(view);
         }
         CloseHandle(mapping);
@@ -229,13 +238,107 @@ void test_failsafe_watchdog_roundtrip() {
     std::filesystem::remove(tmp, ec);
 }
 
+void test_spectrum_analyzer() {
+    atriswave::dsp::SpectrumAnalyzer analyzer;
+    analyzer.prepare(48000.0);
+
+    constexpr size_t kN = 2048;
+    std::vector<float> sine(kN, 0.0f);
+    constexpr float kTwoPi = 6.283185307f;
+    for (size_t i = 0; i < kN; ++i) {
+        sine[i] = 0.5f * std::sin(kTwoPi * 1000.0f * static_cast<float>(i) / 48000.0f);
+    }
+    analyzer.push_block(sine.data(), sine.data(), kN);
+
+    std::array<float, ATRISWAVE_SPECTRUM_BINS> bins{};
+    analyzer.read_bins(bins.data(), bins.size());
+
+    float max_bin_db = -90.0f;
+    size_t max_idx = 0;
+    for (size_t i = 0; i < bins.size(); ++i) {
+        ATRIS_CHECK(std::isfinite(bins[i]) && bins[i] >= -90.0f && bins[i] <= 0.0f,
+                    "Spectrum bin finite in [-90, 0]");
+        if (bins[i] > max_bin_db) {
+            max_bin_db = bins[i];
+            max_idx = i;
+        }
+    }
+    // 1 kHz is in the middle of 30 Hz .. 18 kHz log scale (around bins 12..22)
+    ATRIS_CHECK(max_bin_db > -20.0f && max_idx >= 10 && max_idx <= 24,
+                "1 kHz sine peaks in mid-band");
+}
+
+void test_soundboard_wav_decode_and_playback() {
+    const std::filesystem::path wav_path =
+        std::filesystem::temp_directory_path() / "atriswave_soundboard_test.wav";
+    std::error_code ec;
+    std::filesystem::remove(wav_path, ec);
+
+    // Write a minimal 48 kHz mono PCM16 WAV (2400 frames = 50ms)
+    constexpr uint32_t kFrames = 2400;
+    constexpr uint32_t kDataBytes = kFrames * 2;
+    {
+        std::ofstream out(wav_path, std::ios::binary | std::ios::trunc);
+        auto write_u16 = [&](uint16_t v) { out.write(reinterpret_cast<const char*>(&v), 2); };
+        auto write_u32 = [&](uint32_t v) { out.write(reinterpret_cast<const char*>(&v), 4); };
+        out.write("RIFF", 4);
+        write_u32(36 + kDataBytes);
+        out.write("WAVE", 4);
+        out.write("fmt ", 4);
+        write_u32(16);
+        write_u16(1);     // PCM
+        write_u16(1);     // Mono
+        write_u32(48000); // SampleRate
+        write_u32(96000); // ByteRate
+        write_u16(2);     // BlockAlign
+        write_u16(16);    // BitsPerSample
+        out.write("data", 4);
+        write_u32(kDataBytes);
+        for (uint32_t i = 0; i < kFrames; ++i) {
+            const int16_t sample = static_cast<int16_t>(16000.0 * std::sin(0.1 * i));
+            write_u16(static_cast<uint16_t>(sample));
+        }
+    }
+
+    atriswave::dsp::SoundboardEngine sb;
+    atriswave::dsp::SoundboardEngine::PlayRequest req{};
+    req.wav_path = wav_path;
+    req.gain = 0.8f;
+    req.send_a1 = true;
+    req.send_b1 = true;
+    req.send_b2 = true;
+    const auto res = sb.play(req);
+    ATRIS_CHECK(res.ok && res.slot == 0 && res.duration_ms == 50,
+                "Soundboard decoded temp WAV cleanly");
+    ATRIS_CHECK(sb.active_voices() == 1u, "1 active voice");
+
+    std::vector<float> a1_l(480, 0.0f), a1_r(480, 0.0f);
+    std::vector<float> b1_l(480, 0.0f), b1_r(480, 0.0f);
+    std::vector<float> b2_l(480, 0.0f), b2_r(480, 0.0f);
+    sb.mix_into_buses(a1_l.data(), a1_r.data(), b1_l.data(), b1_r.data(), b2_l.data(), b2_r.data(), 480);
+
+    float peak = 0.0f;
+    for (float v : a1_l) peak = std::max(peak, std::abs(v));
+    ATRIS_CHECK(peak > 0.1f, "Soundboard mixed non-zero samples into A1");
+
+    sb.stop(-1);
+    for (int i = 0; i < 4; ++i) {
+        sb.mix_into_buses(a1_l.data(), a1_r.data(), b1_l.data(), b1_r.data(), b2_l.data(), b2_r.data(), 480);
+    }
+    ATRIS_CHECK(sb.active_voices() == 0u, "Soundboard stopped cleanly after fade-out");
+
+    std::filesystem::remove(wav_path, ec);
+}
+
 } // namespace
 
 int main() {
-    test_telemetry_v2_layout_and_roundtrip();
+    test_telemetry_v3_layout_and_roundtrip();
     test_dynamic_mixer_bus_routing_limiter_and_ducking();
     test_engine_v2_channels_feedback_and_echo_lock();
     test_failsafe_watchdog_roundtrip();
+    test_spectrum_analyzer();
+    test_soundboard_wav_decode_and_playback();
 
     if (g_failures == 0) {
         std::cout << "[atriswave_v2_mixer_tests] ALL TESTS PASSED\n";

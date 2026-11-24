@@ -29,7 +29,8 @@ public:
 
     /// Publishes a telemetry snapshot using the seqlock protocol.
     /// Real-time safe (no locks, no allocations, no syscalls).
-    void publish(const TelemetrySnapshot& snapshot) noexcept;
+    void publish(const TelemetrySnapshot& snapshot,
+                 const float* spectrum_db = nullptr) noexcept;
 
     /// Returns the current QueryPerformanceCounter timestamp.
     [[nodiscard]] static uint64_t query_qpc() noexcept;

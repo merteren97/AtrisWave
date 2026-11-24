@@ -293,6 +293,51 @@ public sealed class EnginePipeClient : IDisposable
     public Task<EnginePipeResponse> AutoSetupDefaultsAsync(CancellationToken cancellationToken = default)
         => SendCommandAsync("auto_setup_defaults", null, cancellationToken);
 
+    // --- v2.1 Soundboard & Spectrum Commands ---
+
+    public Task<EnginePipeResponse> PlaySoundboardAsync(
+        string path,
+        float gain = 1.0f,
+        bool sendA1 = true,
+        bool sendB1 = false,
+        bool sendB2 = true,
+        bool loop = false,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync(
+            "play_soundboard",
+            new { path, gain, send_a1 = sendA1, send_b1 = sendB1, send_b2 = sendB2, loop },
+            cancellationToken);
+
+    public Task<EnginePipeResponse> StopSoundboardAsync(int slot = -1, CancellationToken cancellationToken = default)
+        => SendCommandAsync("stop_soundboard", new { slot }, cancellationToken);
+
+    public Task<EnginePipeResponse> GetSoundboardStatusAsync(CancellationToken cancellationToken = default)
+        => SendCommandAsync("get_soundboard_status", null, cancellationToken);
+
+    public Task<EnginePipeResponse> SetSpectrumSourceAsync(uint channelId, CancellationToken cancellationToken = default)
+        => SendCommandAsync("set_spectrum_source", new { channel_id = channelId }, cancellationToken);
+
+    public Task<EnginePipeResponse> SetChannelFullDspAsync(DynamicChannelModel ch, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ch);
+        return SendCommandAsync("set_channel_dsp", new
+        {
+            channel_id = ch.ChannelId,
+            volume = ch.Volume,
+            muted = ch.Muted,
+            solo = ch.Solo,
+            pan = ch.Pan,
+            eq_enabled = true,
+            eq_low_db = ch.EqLowDb,
+            eq_mid1_db = ch.EqMidDb,
+            eq_high_db = ch.EqHighDb,
+            comp_enabled = ch.CompEnabled,
+            comp_threshold_db = ch.CompThresholdDb,
+            duck_source_id = ch.DuckSourceId,
+            duck_depth_db = ch.DuckDepthDb,
+        }, cancellationToken);
+    }
+
     private static bool TryUnwrapResult(EnginePipeResponse resp, out JsonElement result)
     {
         if (resp.Ok && resp.Payload is JsonElement root)

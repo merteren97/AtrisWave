@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -9,6 +10,7 @@ using AtrisWave.Core.Dsp;
 using AtrisWave.Core.Ipc;
 using AtrisWave.Core.Models;
 using AtrisWave.Core.Plugins;
+using AtrisWave.Core.Services;
 using AtrisWave.UI.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -24,6 +26,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly LocalAutomationServer _rpcServer;
     private readonly ChannelMeterFrame[] _channelBuffer = new ChannelMeterFrame[TelemetryConstants.MaxChannels];
     private readonly ChannelMeterFrame[] _busBuffer = new ChannelMeterFrame[TelemetryConstants.MaxBuses];
+    public float[] SpectrumDb { get; } = new float[TelemetryConstants.SpectrumBins];
     private readonly DispatcherTimer _telemetryTimer;
     private readonly DispatcherTimer _micDspDebounceTimer;
     private bool _disposed;
@@ -50,7 +53,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<AudioSessionInfo> AudioSessions { get; } = [];
     public ObservableCollection<RoutingRule> RoutingRules { get; } = [];
     public ObservableCollection<DiscoveredPlugin> DiscoveredPlugins { get; } = [];
+    public ObservableCollection<SoundboardPadModel> SoundboardPads { get; } = CreateDefaultSoundboardPads();
     public ObservableCollection<string> Presets { get; } = ["Broadcast Warm", "Podcast Crisp", "Gaming Clean"];
+
+    [ObservableProperty] private int _selectedNavIndex;
+    [ObservableProperty] private bool _isChannelDrawerOpen;
+    [ObservableProperty] private DynamicChannelModel? _selectedDrawerChannel;
+    [ObservableProperty] private string _updateStatusText = string.Empty;
+    [ObservableProperty] private string _updateReleaseUrl = string.Empty;
+    [ObservableProperty] private bool _isUpdateAvailable;
+
+    public event EventHandler? SpectrumUpdated;
 
     [ObservableProperty] private AudioSessionInfo? _selectedAudioSession;
     [ObservableProperty] private string _presetNameInput = "Broadcast Warm";
@@ -180,6 +193,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 _ = _pipeClient.BindChannelSourceAsync(ch.ChannelId, ch.SourceType, ch.DeviceId);
                 UpdateHealthCheck();
                 break;
+            case nameof(DynamicChannelModel.EqLowDb):
+            case nameof(DynamicChannelModel.EqMidDb):
+            case nameof(DynamicChannelModel.EqHighDb):
+            case nameof(DynamicChannelModel.CompEnabled):
+            case nameof(DynamicChannelModel.CompThresholdDb):
+            case nameof(DynamicChannelModel.DuckSourceId):
+            case nameof(DynamicChannelModel.DuckDepthDb):
+                _ = _pipeClient.SetChannelFullDspAsync(ch);
+                break;
         }
     }
 
@@ -226,8 +248,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IsEngineProcessRunning = _processManager.IsRunning;
         EngineActionKey = IsEngineProcessRunning ? "Io_StopEngine" : "Io_LaunchEngine";
 
-        if (_telemetryReader.TryRead(out TelemetryHeader header, _channelBuffer, _busBuffer))
+        if (_telemetryReader.TryRead(out TelemetryHeader header, _channelBuffer, _busBuffer, SpectrumDb))
         {
+            SpectrumUpdated?.Invoke(this, EventArgs.Empty);
             EngineState state = Enum.IsDefined(typeof(EngineState), header.EngineState)
                 ? (EngineState)header.EngineState
                 : EngineState.Stopped;
@@ -759,6 +782,111 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             default:
                 return new RpcMethodNotFound();
         }
+    }
+
+    [RelayCommand]
+    private void SelectNav(string? indexStr)
+    {
+        if (int.TryParse(indexStr, out int idx))
+        {
+            SelectedNavIndex = idx;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenChannelDrawer(DynamicChannelModel? channel)
+    {
+        if (channel is null) return;
+        SelectedDrawerChannel = channel;
+        IsChannelDrawerOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseChannelDrawer() => IsChannelDrawerOpen = false;
+
+    [RelayCommand]
+    private async Task FocusSpectrumOnChannelAsync(DynamicChannelModel? channel)
+    {
+        if (channel is null) return;
+        await _pipeClient.SetSpectrumSourceAsync(channel.ChannelId);
+    }
+
+    [RelayCommand]
+    private void BrowseSoundboardWav(SoundboardPadModel? pad)
+    {
+        if (pad is null) return;
+        var dlg = new OpenFileDialog { Filter = "WAV Audio (*.wav)|*.wav|All Files (*.*)|*.*" };
+        if (dlg.ShowDialog() == true)
+        {
+            pad.FilePath = dlg.FileName;
+            if (string.IsNullOrWhiteSpace(pad.Title) || pad.Title.StartsWith("Pad "))
+            {
+                pad.Title = Path.GetFileNameWithoutExtension(dlg.FileName);
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task PlaySoundboardPadAsync(SoundboardPadModel? pad)
+    {
+        if (pad is null || !pad.HasFile) return;
+        await _pipeClient.PlaySoundboardAsync(pad.FilePath, pad.Gain, pad.SendA1, pad.SendB1, pad.SendB2, pad.Loop);
+    }
+
+    [RelayCommand]
+    private async Task StopAllSoundboardAsync()
+        => await _pipeClient.StopSoundboardAsync(-1);
+
+    [RelayCommand]
+    private void ToggleA1A2QuickOutput()
+    {
+        if (OutputBuses.Count < 2) return;
+        bool a1Muted = OutputBuses[0].Muted;
+        OutputBuses[0].Muted = !a1Muted;
+        OutputBuses[1].Muted = a1Muted;
+    }
+
+    [RelayCommand]
+    private async Task CheckForUpdatesAsync()
+    {
+        UpdateCheckResult res = await GitHubUpdateChecker.CheckForUpdatesAsync("2.1.0-alpha");
+        if (!res.Success)
+        {
+            UpdateStatusText = res.Error ?? "Offline";
+            IsUpdateAvailable = false;
+            return;
+        }
+
+        IsUpdateAvailable = res.UpdateAvailable;
+        UpdateReleaseUrl = res.ReleaseUrl;
+        UpdateStatusText = res.UpdateAvailable
+            ? $"{LocalizationService.Instance.GetString("Update_Available")} {res.LatestVersion}"
+            : LocalizationService.Instance.GetString("Update_UpToDate");
+    }
+
+    [RelayCommand]
+    private void OpenUpdateRelease()
+    {
+        if (!string.IsNullOrWhiteSpace(UpdateReleaseUrl))
+        {
+            Process.Start(new ProcessStartInfo { FileName = UpdateReleaseUrl, UseShellExecute = true });
+        }
+    }
+
+    private static ObservableCollection<SoundboardPadModel> CreateDefaultSoundboardPads()
+    {
+        string[] palette = ["#38BDF8", "#A855F7", "#10B981", "#F59E0B", "#EC4899", "#06B6D4"];
+        var list = new ObservableCollection<SoundboardPadModel>();
+        for (int i = 0; i < 12; i++)
+        {
+            list.Add(new SoundboardPadModel
+            {
+                PadIndex = i,
+                Title = $"Pad {i + 1}",
+                AccentColor = palette[i % palette.Length],
+            });
+        }
+        return list;
     }
 
     public async Task ShutdownEngineOnExitAsync()

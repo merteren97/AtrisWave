@@ -45,8 +45,9 @@
             </DrawingImage>
 
             <tb:TaskbarIcon x:Key="AtrisTrayIcon"
-                            IconSource="{StaticResource AppTrayIconImage}"
+                            IconSource="pack://application:,,,/AtrisWave.UI;component/Resources/atriswave.ico"
                             ToolTipText="{DynamicResource App_Title}"
+                            TrayLeftMouseUp="OnTrayLeftClick"
                             TrayMouseDoubleClick="OnTrayShowMixerClick">
                 <tb:TaskbarIcon.ContextMenu>
                     <ContextMenu>

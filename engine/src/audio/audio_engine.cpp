@@ -1,4 +1,5 @@
 #include <atriswave/audio/audio_engine.hpp>
+#include <atriswave/audio/com_utils.hpp>
 #include <atriswave/audio/config_store.hpp>
 #include <atriswave/ipc_protocol.h>
 #include <atriswave/rt_safety.hpp>
@@ -16,6 +17,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string_view>
 
 namespace atriswave {
@@ -159,6 +161,7 @@ void AudioEngine::init_default_slots() {
         channels_[i].pair_group.clear();
         channels_[i].pll_l.reset();
         channels_[i].pll_r.reset();
+        channels_[i].leftover_count = 0;
         dynamic_mixer_.set_channel_active(i, false);
     }
 
@@ -222,6 +225,10 @@ bool AudioEngine::start(void* shutdown_event, bool headless_test) {
         ch_in_l_[ch].assign(kMasterTickFrames, 0.0f);
         ch_in_r_[ch].assign(kMasterTickFrames, 0.0f);
     }
+    pll_in_l_.assign(kMasterTickFrames * 2, 0.0f);
+    pll_in_r_.assign(kMasterTickFrames * 2, 0.0f);
+    pll_out_l_.assign(kMasterTickFrames * 2, 0.0f);
+    pll_out_r_.assign(kMasterTickFrames * 2, 0.0f);
     mic_mono_scratch_.assign(kMasterTickFrames, 0.0f);
     mic_mon_l_.assign(kMasterTickFrames, 0.0f);
     mic_mon_r_.assign(kMasterTickFrames, 0.0f);
@@ -234,6 +241,7 @@ bool AudioEngine::start(void* shutdown_event, bool headless_test) {
 
     mic_pipeline_.prepare(48000.0, kMasterTickFrames);
     dynamic_mixer_.prepare(48000.0);
+    spectrum_analyzer_.prepare(48000.0);
     mic_pipeline_.set_params(to_dsp_params(current_mic_cfg_));
 
     {
@@ -254,6 +262,8 @@ bool AudioEngine::start(void* shutdown_event, bool headless_test) {
     engine_state_.store(ATRISWAVE_ENGINE_STATE_RUNNING, std::memory_order_release);
 
     if (!headless_test) {
+        (void)failsafe_.arm_current_system_defaults();
+        launch_watchdog_if_present();
         (void)auto_setup_defaults();
     }
 
@@ -300,7 +310,47 @@ void AudioEngine::stop() {
     publish_telemetry_tick();
     telemetry_.close();
     (void)failsafe_.disarm();
+    if (watchdog_process_ != nullptr) {
+        CloseHandle(static_cast<HANDLE>(watchdog_process_));
+        watchdog_process_ = nullptr;
+    }
     shutdown_event_ = nullptr;
+}
+
+void AudioEngine::launch_watchdog_if_present() noexcept {
+    wchar_t exe_path[MAX_PATH]{};
+    const DWORD len = GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) {
+        return;
+    }
+    const std::filesystem::path watchdog_exe =
+        std::filesystem::path(exe_path).parent_path() / L"AtrisWaveWatchdog.exe";
+    std::error_code ec;
+    if (!std::filesystem::exists(watchdog_exe, ec)) {
+        return;
+    }
+
+    const std::wstring cmd =
+        L"\"" + watchdog_exe.wstring() + L"\" --watch-pid " + std::to_wstring(GetCurrentProcessId());
+    std::wstring cmd_mutable = cmd;
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    if (CreateProcessW(
+            watchdog_exe.c_str(),
+            cmd_mutable.data(),
+            nullptr,
+            nullptr,
+            FALSE,
+            CREATE_NO_WINDOW,
+            nullptr,
+            nullptr,
+            &si,
+            &pi)) {
+        CloseHandle(pi.hThread);
+        watchdog_process_ = pi.hProcess;
+    }
 }
 
 void AudioEngine::master_clock_loop() {
@@ -359,15 +409,52 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
         const size_t avail = ring.available_read();
         const float fill_ratio = static_cast<float>(avail) / static_cast<float>(ring.capacity());
         channels_[ch].pll_l.update_pll(fill_ratio, 0.25f);
-        channels_[ch].pll_r.update_pll(fill_ratio, 0.25f);
 
-        for (size_t i = 0; i < frames; ++i) {
+        size_t total_in = channels_[ch].leftover_count;
+        for (size_t i = 0; i < total_in; ++i) {
+            pll_in_l_[i] = channels_[ch].leftover_l[i];
+            pll_in_r_[i] = channels_[ch].leftover_r[i];
+        }
+
+        const size_t needed_total =
+            static_cast<size_t>(std::ceil(static_cast<double>(frames) * channels_[ch].pll_l.current_ratio())) + 4;
+        const size_t to_pop = (needed_total > total_in)
+            ? std::min({avail, needed_total - total_in, pll_in_l_.size() - total_in})
+            : 0;
+
+        for (size_t i = 0; i < to_pop; ++i) {
             StereoFrame f{};
             if (!ring.try_pop(f)) {
                 f = StereoFrame{};
             }
-            ch_in_l_[ch][i] = f.l;
-            ch_in_r_[ch][i] = f.r;
+            pll_in_l_[total_in + i] = f.l;
+            pll_in_r_[total_in + i] = f.r;
+        }
+        total_in += to_pop;
+
+        if (total_in > 0) {
+            size_t produced = 0;
+            const size_t consumed = channels_[ch].pll_l.process_stereo(
+                pll_in_l_.data(),
+                pll_in_r_.data(),
+                total_in,
+                ch_in_l_[ch].data(),
+                ch_in_r_[ch].data(),
+                frames,
+                produced);
+            const size_t rem = (total_in > consumed) ? std::min<size_t>(total_in - consumed, 16) : 0;
+            for (size_t i = 0; i < rem; ++i) {
+                channels_[ch].leftover_l[i] = pll_in_l_[consumed + i];
+                channels_[ch].leftover_r[i] = pll_in_r_[consumed + i];
+            }
+            channels_[ch].leftover_count = rem;
+            for (size_t i = produced; i < frames; ++i) {
+                ch_in_l_[ch][i] = 0.0f;
+                ch_in_r_[ch][i] = 0.0f;
+            }
+        } else {
+            std::fill_n(ch_in_l_[ch].data(), frames, 0.0f);
+            std::fill_n(ch_in_r_[ch].data(), frames, 0.0f);
         }
 
         if (ch == 1) {
@@ -389,6 +476,11 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
         }
     }
 
+    const uint32_t spec_ch = spectrum_source_ch_.load(std::memory_order_relaxed);
+    if (spec_ch < dsp::kDynamicMaxChannels && in_l[spec_ch] != nullptr) {
+        spectrum_analyzer_.push_block(in_l[spec_ch], in_r[spec_ch], frames);
+    }
+
     std::array<float*, dsp::kDynamicMaxBuses> out_l{};
     std::array<float*, dsp::kDynamicMaxBuses> out_r{};
     for (size_t b = 0; b < dsp::kDynamicMaxBuses; ++b) {
@@ -398,11 +490,26 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
 
     dynamic_mixer_.process(in_l, in_r, out_l, out_r, frames);
 
+    // Mix Soundboard polyphonic voices into A1, B1, B2
+    soundboard_.mix_into_buses(
+        bus_out_l_[0].data(), bus_out_r_[0].data(),
+        bus_out_l_[2].data(), bus_out_r_[2].data(),
+        bus_out_l_[3].data(), bus_out_r_[3].data(),
+        frames);
+
     // Sum low-latency Direct Monitor Sidetone into Bus A1 (Headphones) when Mic stream is active
     if (channels_[1].stream_active.load(std::memory_order_acquire)) {
         for (size_t i = 0; i < frames; ++i) {
-            bus_out_l_[0][i] = std::clamp(bus_out_l_[0][i] + mic_mon_l_[i], -0.95f, 0.95f);
-            bus_out_r_[0][i] = std::clamp(bus_out_r_[0][i] + mic_mon_r_[i], -0.95f, 0.95f);
+            bus_out_l_[0][i] += mic_mon_l_[i];
+            bus_out_r_[0][i] += mic_mon_r_[i];
+        }
+    }
+
+    // Clamp A1, B1, B2 after post-limiter Soundboard + Sidetone summing
+    for (size_t b : {size_t{0}, size_t{2}, size_t{3}}) {
+        for (size_t i = 0; i < frames; ++i) {
+            bus_out_l_[b][i] = std::clamp(bus_out_l_[b][i], -0.95f, 0.95f);
+            bus_out_r_[b][i] = std::clamp(bus_out_r_[b][i], -0.95f, 0.95f);
         }
     }
 
@@ -413,10 +520,19 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
         auto& ring = buses_[b].output_ring;
         const float fill_ratio = static_cast<float>(ring.available_read()) / static_cast<float>(ring.capacity());
         buses_[b].pll_l.update_pll(fill_ratio, 0.25f);
-        buses_[b].pll_r.update_pll(fill_ratio, 0.25f);
 
-        for (size_t i = 0; i < frames; ++i) {
-            if (!ring.try_push(StereoFrame{bus_out_l_[b][i], bus_out_r_[b][i]})) {
+        size_t produced = 0;
+        (void)buses_[b].pll_l.process_stereo(
+            bus_out_l_[b].data(),
+            bus_out_r_[b].data(),
+            frames,
+            pll_out_l_.data(),
+            pll_out_r_.data(),
+            pll_out_l_.size(),
+            produced);
+
+        for (size_t i = 0; i < produced; ++i) {
+            if (!ring.try_push(StereoFrame{pll_out_l_[i], pll_out_r_[i]})) {
                 xrun_count_.fetch_add(1, std::memory_order_relaxed);
                 break;
             }
@@ -437,13 +553,15 @@ void AudioEngine::publish_telemetry_tick() noexcept {
     snap.header.timestamp_qpc = TelemetryPublisher::query_qpc();
     snap.header.xrun_count = xrun_count_.load(std::memory_order_relaxed);
     snap.header.bus_count = ATRISWAVE_MAX_BUSES;
+    snap.header.spectrum_bins = ATRISWAVE_SPECTRUM_BINS;
 
     uint32_t active_ch = 0;
     dynamic_mixer_.fill_telemetry(snap.channels, active_ch, snap.buses);
     snap.header.channel_count = active_ch;
     snap.channels[1].gain_reduction_db = mic_pipeline_.gain_reduction_db();
+    spectrum_analyzer_.read_bins(snap.spectrum_db, ATRISWAVE_SPECTRUM_BINS);
 
-    telemetry_.publish(snap);
+    telemetry_.publish(snap, snap.spectrum_db);
 }
 
 int AudioEngine::bus_index_from_id(const std::string& bus_id) noexcept {
@@ -1020,6 +1138,41 @@ V2CommandResult AudioEngine::auto_setup_defaults() {
         (void)bind_output_bus("B1", virtual_mic_render, 1.0f, false);
     }
     return {true, {}, 0};
+}
+
+SoundboardPlayResult AudioEngine::play_soundboard(const std::string& path,
+                                                  float gain,
+                                                  bool send_a1,
+                                                  bool send_b1,
+                                                  bool send_b2,
+                                                  bool loop) {
+    dsp::SoundboardEngine::PlayRequest req{};
+    req.wav_path = audio::utf8_to_wide(path);
+    req.gain = gain;
+    req.send_a1 = send_a1;
+    req.send_b1 = send_b1;
+    req.send_b2 = send_b2;
+    req.loop = loop;
+    const auto res = soundboard_.play(req);
+    return {res.ok, res.slot, res.duration_ms};
+}
+
+bool AudioEngine::stop_soundboard(int slot) {
+    soundboard_.stop(slot);
+    return true;
+}
+
+SoundboardStatus AudioEngine::get_soundboard_status() {
+    return {soundboard_.active_voices(), static_cast<uint32_t>(dsp::SoundboardEngine::kMaxVoices)};
+}
+
+V2CommandResult AudioEngine::set_spectrum_source(uint32_t channel_id) {
+    if (channel_id >= dsp::kDynamicMaxChannels) {
+        return {false, "invalid_channel_id", channel_id};
+    }
+    spectrum_source_ch_.store(channel_id, std::memory_order_release);
+    spectrum_analyzer_.reset();
+    return {true, {}, channel_id};
 }
 
 void AudioEngine::on_channel_capture(uint32_t ch_idx,

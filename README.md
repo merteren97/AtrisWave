@@ -16,14 +16,15 @@ English | [Türkçe](README-TR.md)
 
 - **Dynamic 16-Channel Rack (`+ Add Channel`)**: Start cleanly with default *System* (catch-all) and *Microphone* strips, or dynamically add/rename/delete up to 16 virtual channels with dedicated faders, mute/solo states, and drag-and-drop per-app binding.
 - **`A1 / A2 / B1 / B2` Hardware & Virtual Output Matrix**: Route any channel independently to 4 master output buses (*A1/A2* physical headphones/speakers, *B1/B2* virtual stream/chat outputs) with per-bus `-0.5 dBFS` lookahead limiting, **Feedback Loop Blocker**, and **Process Loopback `A1/A2` Echo Lock**.
-- **Dedicated High-Res Master Clock & Failsafe Watchdog**: 10 ms `CreateWaitableTimerExW` Master Clock with per-stream `AdaptivePllResampler`, plus `AtrisWaveWatchdog.exe` 3-layer default-device failsafe so Windows audio never stays stranded on a virtual device.
+- **Dedicated High-Res Master Clock & Auto-Watchdog**: 10 ms `CreateWaitableTimerExW` Master Clock with full stereo `AdaptivePllResampler`, plus automatic sibling `AtrisWaveWatchdog.exe` launch (3-layer default-device failsafe) so Windows audio never stays stranded on a virtual device.
+- **12-Pad Real-Time WAV Soundboard**: Trigger custom `.wav` clips directly into any virtual mix or output bus in real time.
 - **WASAPI `IAudioClient3` & Per-App Routing**: Low-latency Windows audio backend with **WASAPI Process Loopback** (`AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS`) and persistent per-application routing rules.
 - **Full Dual-Path Microphone DSP**:
   - **Direct Monitor (Sidetone)**: Hear your voice in **~6–12 ms** (WASAPI `IAudioClient3`) bypassing heavy spectral/reverb stages.
-  - **Broadcast / Stream Chain**: Spectral Denoiser, Noise Gate, 5-Band Cytomic/Simper ZDF SVF Parametric EQ (with **AutoEq `.txt` import**), Compressor + **Sidechain Ducking**, Algorithmic + **FFT Convolution Reverb** (*Studio Booth*, *Broadcast Room*, *Concert Hall*), Real-Time **Pitch Shifter** (`-12 .. +12 st`), and **True-Peak Limiter**.
+  - **Broadcast / Stream Chain**: Spectral Denoiser, Noise Gate, 5-Band Cytomic/Simper ZDF SVF Parametric EQ (with **AutoEq `.txt` import** & **Live 32-Band FFT Spectrum Analyzer**), Compressor + **Cross-Channel Sidechain Ducking**, Algorithmic + **FFT Convolution Reverb** (*Studio Booth*, *Broadcast Room*, *Concert Hall*), Real-Time **Pitch Shifter** (`-12 .. +12 st`), and **True-Peak Limiter**.
 - **Out-of-Process Plugin Sandbox (`plugin-host/`)**: Host **CLAP** and **VST3 (3.8+ MIT)** plugins in an isolated `AtrisWavePluginHost.exe` process with **5 ms crash-bypass** protection.
-- **Automation & Global Hotkeys**: Native Win32 global hotkeys (`Ctrl+Alt+M` Mic Mute, `Ctrl+Alt+S` Sidetone) and a loopback-only Stream Deck / Touch Portal **JSON-RPC 2.0 API** (`http://127.0.0.1:18923/rpc`).
-- **60 FPS Studio UI**: Modern Windows 11 dark Fluent interface (`Wpf.Ui`) with allocation-free 60 FPS `SkiaSharp` VU metering, live EQ curve editor, system tray Quick-Mix, and instant English / Turkish localization.
+- **Automation, Hotkeys & Update Checker**: Native Win32 global hotkeys (`Ctrl+Alt+M` Mic Mute, `Ctrl+Alt+S` Sidetone), loopback-only Stream Deck / Touch Portal **JSON-RPC 2.0 API** (`http://127.0.0.1:18923/rpc`), and GitHub Releases update checker.
+- **60 FPS Obsidian Studio Console UI (`v2.1.0-alpha`)**: Left Fluent Navigation Rail (*Mixer*, *Mic Studio*, *App Routing*, *Soundboard*, *Pro & Automation*), custom 60 FPS `SkiaSharp` **Rotary Knobs**, **Console Faders**, and **VU Meters**, **Slide-Out Per-Channel DSP Drawer**, **EarTrumpet-style Quick-Mix Tray Flyout** (`A1 ↔ A2`), custom `atriswave.ico` branding, and instant English / Turkish localization.
 
 ---
 
@@ -32,16 +33,16 @@ English | [Türkçe](README-TR.md)
 AtrisWave decouples UI rendering, real-time DSP, third-party plugin execution, and kernel audio endpoints (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full engineering specification):
 
 ```text
-  [ C# .NET 10 WPF UI ]  <── 704B Seqlock SHM V2 (60 FPS) ──  [ C++20 Engine Daemon ]
+  [ C# .NET 10 WPF UI ]  <── 832B Seqlock SHM V3 (60 FPS) ──  [ C++20 Engine Daemon ]
    (ui/ — Wpf.Ui + Skia)  ── Named Pipe JSON Control ───────>   (engine/ — Session 1+)
                                                                   │       │       │
                                            5ms Crash-Bypass SHM ──┘       │       └── Direct Ring / IOCTL
                                                    v                      v                  v
                                       [ AtrisWavePluginHost.exe ]  [ Watchdog.exe ]  [ AtrisWaveVAD.sys ]
-                                      (plugin-host/ — CLAP/VST3)   (Failsafe)        (driver/ — 16-Slot Pool)
+                                      (plugin-host/ — CLAP/VST3)   (Auto-Failsafe)   (driver/ — 16-Slot Pool)
 ```
 
-1. **Desktop UI (`ui/`)**: C# `.NET 10` WPF application (`AtrisWave.UI.exe`) using `Wpf.Ui` Fluent styling, `SkiaSharp.Views.WPF` (`SKElement`) 60 FPS meters, `H.NotifyIcon.Wpf` system tray, guided Audio Health Check, global hotkeys, and loopback JSON-RPC server.
+1. **Desktop UI (`ui/`)**: C# `.NET 10` WPF Studio Console (`AtrisWave.UI.exe`) with Left Fluent Navigation Rail, custom 60 FPS `SkiaSharp` Rotary Knobs / Console Faders / VU Meters / 32-band FFT Spectrum EQ, Slide-Out Channel DSP Drawer, EarTrumpet-style Quick-Mix Tray Flyout, custom `atriswave.ico`, global hotkeys, loopback JSON-RPC server, and GitHub Releases update checker.
 2. **Audio Engine & Failsafe (`engine/`)**: Headless **C++20** Session 1+ daemon (`AtrisWaveEngine.exe`) running a dedicated `CreateWaitableTimerExW` Master Clock with MMCSS `"Pro Audio"` priority, FTZ/DAZ denormal flushing, `AdaptivePllResampler`, lock-free SPSC ring buffers, and `AtrisWaveWatchdog.exe` default-device failsafe.
 3. **Virtual Audio Driver (`driver/`)**: C++ WDK **WaveRT / SysVAD** kernel driver (`AtrisWaveVAD.sys`) with a **16-slot `KSJACK_DESCRIPTION.IsConnected` pooled endpoint architecture** and RFC 3161 test-signing & Attestation Signing scripts (`driver/scripts/build-and-testsign.ps1`).
 4. **Out-of-Process Plugin Host (`plugin-host/`)**: Isolated C++20 sandbox (`AtrisWavePluginHost.exe`) for **CLAP** and **VST3 (3.8+)** plugins with lock-free shared-memory audio transport and automatic 5 ms crash-bypass failover.

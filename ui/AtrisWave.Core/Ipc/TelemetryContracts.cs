@@ -3,25 +3,24 @@ using System.Runtime.InteropServices;
 namespace AtrisWave.Core.Ipc;
 
 /// <summary>
-/// Binary C-ABI constants matching <c>shared/include/atriswave/ipc_protocol.h</c> (Telemetry V2).
+/// Binary C-ABI constants matching <c>shared/include/atriswave/ipc_protocol.h</c> (Telemetry V3).
 /// </summary>
 public static class TelemetryConstants
 {
     public const string PipeName = "AtrisWaveEngine";
-    public const string SharedMemoryName = @"Local\AtrisWaveTelemetryV2";
+    public const string SharedMemoryName = @"Local\AtrisWaveTelemetryV3";
     public const uint Magic = 0x4157544Du; // "AWTM"
-    public const uint ProtocolVersion = 2u;
+    public const uint ProtocolVersion = 3u;
     public const int MaxChannels = 16;
     public const int MaxBuses = 4;
+    public const int SpectrumBins = 32;
     public const int HeaderSizeBytes = 64;
     public const int ChannelFrameSizeBytes = 32;
+    public const int SpectrumBytes = SpectrumBins * sizeof(float); // 128 bytes
     public const int TotalSnapshotSizeBytes =
-        HeaderSizeBytes + (MaxChannels * ChannelFrameSizeBytes) + (MaxBuses * ChannelFrameSizeBytes); // 704 bytes
+        HeaderSizeBytes + (MaxChannels * ChannelFrameSizeBytes) + (MaxBuses * ChannelFrameSizeBytes) + SpectrumBytes; // 832 bytes
 }
 
-/// <summary>
-/// Audio engine lifecycle state reported in <see cref="TelemetryHeader.EngineState"/>.
-/// </summary>
 public enum EngineState : uint
 {
     Stopped = 0,
@@ -29,9 +28,6 @@ public enum EngineState : uint
     Degraded = 2,
 }
 
-/// <summary>
-/// Per-channel status bitflags reported in <see cref="ChannelMeterFrame.Flags"/>.
-/// </summary>
 [Flags]
 public enum ChannelMeterFlags : uint
 {
@@ -41,9 +37,6 @@ public enum ChannelMeterFlags : uint
     Active = 1u << 2,
 }
 
-/// <summary>
-/// Per-channel / per-bus telemetry meter frame (32 bytes, C-ABI Pack=4).
-/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct ChannelMeterFrame
 {
@@ -62,8 +55,7 @@ public struct ChannelMeterFrame
 }
 
 /// <summary>
-/// Shared-memory telemetry header (64 bytes, C-ABI Pack=4, V2 with BusCount at offset 48).
-/// Uses <see cref="Sequence"/> as a seqlock counter: odd = write in progress, even = stable.
+/// Shared-memory telemetry header (64 bytes, C-ABI Pack=4, V3 with BusCount @ 48 and SpectrumBins @ 52).
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct TelemetryHeader
@@ -79,25 +71,31 @@ public struct TelemetryHeader
     public float CpuLoadPercent;
     public uint XrunCount;
     public uint BusCount;
-    public uint Reserved1;
+    public uint SpectrumBins;
     public uint Reserved2;
     public uint Reserved3;
 }
 
 /// <summary>
-/// Consistent, seqlock-verified Telemetry V2 snapshot read from shared memory (16 channels + 4 buses).
+/// Consistent, seqlock-verified Telemetry V3 snapshot (16 channels + 4 buses + 32 FFT spectrum bins).
 /// </summary>
 public sealed class TelemetrySnapshot
 {
     public TelemetryHeader Header { get; }
     public ChannelMeterFrame[] Channels { get; }
     public ChannelMeterFrame[] Buses { get; }
+    public float[] SpectrumDb { get; }
 
-    public TelemetrySnapshot(TelemetryHeader header, ChannelMeterFrame[] channels, ChannelMeterFrame[]? buses = null)
+    public TelemetrySnapshot(
+        TelemetryHeader header,
+        ChannelMeterFrame[] channels,
+        ChannelMeterFrame[]? buses = null,
+        float[]? spectrumDb = null)
     {
         Header = header;
         Channels = channels;
         Buses = buses ?? new ChannelMeterFrame[TelemetryConstants.MaxBuses];
+        SpectrumDb = spectrumDb ?? new float[TelemetryConstants.SpectrumBins];
     }
 
     public EngineState State => Enum.IsDefined(typeof(EngineState), Header.EngineState)

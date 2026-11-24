@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--snapshot" && (i + 1) < argc) {
             snapshot_path = argv[++i];
         } else if (arg == "--version") {
-            std::cout << "AtrisWaveWatchdog 2.0.0-alpha\n";
+            std::cout << "AtrisWaveWatchdog 2.1.0-alpha\n";
             return 0;
         }
     }

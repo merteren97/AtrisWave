@@ -49,6 +49,17 @@ public partial class App : Application
     private void OnTrayShowMixerClick(object sender, RoutedEventArgs e)
         => ShowMainWindow();
 
+    private void OnTrayLeftClick(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+
+        var flyout = new TrayFlyoutWindow(_viewModel, ShowMainWindow);
+        flyout.ShowNearTray();
+    }
+
     private void OnTrayMuteMicClick(object sender, RoutedEventArgs e)
         => _viewModel?.ToggleMicMuteCommand.Execute(null);
 

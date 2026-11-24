@@ -31,6 +31,7 @@ public sealed class EngineIntegrationTests
 
         const string testPresetName = "IntegrationTestPreset";
         const string testRuleProcess = "TestGame.exe";
+        string tempWavPath = Path.Combine(Path.GetTempPath(), $"atriswave_test_{Guid.NewGuid():N}.wav");
         using var pipe = new EnginePipeClient(TelemetryConstants.PipeName, TimeSpan.FromSeconds(2));
 
         try
@@ -126,10 +127,22 @@ public sealed class EngineIntegrationTests
 
             Assert.NotNull(snap1);
             Assert.Equal(TelemetryConstants.Magic, snap1.Header.Magic);
-            Assert.Equal(2u, snap1.Header.Version);
+            Assert.Equal(3u, snap1.Header.Version);
             Assert.True(snap1.Header.ChannelCount >= 2u);
             Assert.Equal(4u, snap1.Header.BusCount);
+            Assert.Equal(32u, snap1.Header.SpectrumBins);
             Assert.Equal(48000u, snap1.Header.SampleRate);
+
+            // 6b. v2.1 Spectrum Source & Soundboard roundtrip
+            EnginePipeResponse specResp = await pipe.SetSpectrumSourceAsync(0);
+            Assert.True(specResp.Ok, $"SetSpectrumSourceAsync failed: {specResp.Error}");
+
+            WriteMinimalStereoWav(tempWavPath);
+            EnginePipeResponse playSbResp = await pipe.PlaySoundboardAsync(tempWavPath, 0.8f, true, false, true, false);
+            Assert.True(playSbResp.Ok, $"PlaySoundboardAsync failed: {playSbResp.Error}");
+
+            EnginePipeResponse stopSbResp = await pipe.StopSoundboardAsync(-1);
+            Assert.True(stopSbResp.Ok, $"StopSoundboardAsync failed: {stopSbResp.Error}");
 
             // 6b. v2 Dynamic Channels & Output Buses roundtrip
             IReadOnlyList<DynamicChannelModel> channels = await pipe.ListChannelsAsync();
@@ -192,6 +205,11 @@ public sealed class EngineIntegrationTests
 
             try
             {
+                if (File.Exists(tempWavPath))
+                {
+                    File.Delete(tempWavPath);
+                }
+
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 string presetPath = Path.Combine(localAppData, "AtrisWave", "presets", $"{testPresetName}.json");
                 if (File.Exists(presetPath))
@@ -202,6 +220,35 @@ public sealed class EngineIntegrationTests
             catch
             {
             }
+        }
+    }
+
+    private static void WriteMinimalStereoWav(string path)
+    {
+        using var fs = File.Create(path);
+        using var bw = new BinaryWriter(fs);
+        const int numSamples = 480;
+        const short channels = 2;
+        const int sampleRate = 48000;
+        const short bitsPerSample = 16;
+        int dataSize = numSamples * channels * (bitsPerSample / 8);
+
+        bw.Write("RIFF"u8);
+        bw.Write(36 + dataSize);
+        bw.Write("WAVE"u8);
+        bw.Write("fmt "u8);
+        bw.Write(16);
+        bw.Write((short)1);
+        bw.Write(channels);
+        bw.Write(sampleRate);
+        bw.Write(sampleRate * channels * (bitsPerSample / 8));
+        bw.Write((short)(channels * (bitsPerSample / 8)));
+        bw.Write(bitsPerSample);
+        bw.Write("data"u8);
+        bw.Write(dataSize);
+        for (int i = 0; i < numSamples * channels; i++)
+        {
+            bw.Write((short)0);
         }
     }
 

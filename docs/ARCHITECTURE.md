@@ -11,23 +11,24 @@ AtrisWave separates **presentation**, **real-time audio processing**, **third-pa
 ```text
 +-----------------------------------------------------------------------------+
 | 1. Desktop UI (ui/ — C# .NET 10 WPF + Wpf.Ui + SkiaSharp)                   |
-|    - 60 FPS SKElement VU meters & live EQ curve (zero per-frame allocs)     |
-|    - System Tray Quick-Mix, EN/TR live localization, AutoEq .txt importer   |
-|    - Win32 Global Hotkeys (Ctrl+Alt+M / Ctrl+Alt+S)                         |
-|    - Loopback-only JSON-RPC 2.0 Server (http://127.0.0.1:18923/rpc)         |
+|    - Left Fluent Navigation Rail (5 modular views) + custom atriswave.ico   |
+|    - 60 FPS SKElement Rotary Knobs, Console Faders, VU Meters & 32-band FFT |
+|    - Slide-Out Channel DSP Drawer + 12-Pad Soundboard + Quick-Mix Flyout    |
+|    - Win32 Global Hotkeys, Loopback JSON-RPC 2.0, GitHub Update Checker     |
 +--------------------+------------------------------------+-------------------+
                      | Reads 60 FPS (Seqlock)             | JSON-Lines Pipe
                      v                                    v
-       [Local\AtrisWaveTelemetryV2]          [\\.\pipe\AtrisWaveEngine]
-            (704-byte SHM)                     (Current-User DACL Pipe)
+       [Local\AtrisWaveTelemetryV3]          [\\.\pipe\AtrisWaveEngine]
+            (832-byte SHM)                     (Current-User DACL Pipe)
                      ^                                    ^
                      | Writes RT-safe (Zero-Lock)         | Non-RT Control
 +--------------------+------------------------------------+-------------------+
-| 2. Audio Engine Daemon & Watchdog (engine/ — C++20 Session 1+ Processes)    |
+| 2. Audio Engine Daemon & Auto-Watchdog (engine/ — C++20 Session 1+)         |
 |    - AtrisWaveEngine.exe (10ms CreateWaitableTimerExW + MMCSS "Pro Audio")  |
-|    - Dynamic 16-Channel x 4-Bus Matrix (A1/A2/B1/B2) + AdaptivePllResampler |
+|    - Dynamic 16-Channel x 4-Bus Matrix + Full Stereo AdaptivePllResampler   |
+|    - RT 32-Band FFT SpectrumAnalyzer + 12-Pad WAV SoundboardEngine          |
 |    - Feedback Loop Blocker + ProcessLoopback A1/A2 Echo Lock                |
-|    - AtrisWaveWatchdog.exe (3-layer Windows default-device failsafe)        |
+|    - Auto-launched sibling AtrisWaveWatchdog.exe (3-layer failsafe)         |
 +-------------------+-------------------------------------+-------------------+
                     | Phase 3: Lock-Free SHM + 5ms Bypass | Phase 2: Ring/IOCTL
                     v                                     v
@@ -67,13 +68,13 @@ Traditional software DSP chains introduce 15–40 ms of latency when spectral/AI
 
 All cross-process binary contracts live in `shared/include/atriswave/` and use `#pragma pack(push, 4)` with `static_assert` size/offset verification:
 
-### 4.1 Telemetry Shared Memory: `Local\AtrisWaveTelemetryV2` (`ipc_protocol.h`)
-- **Total Size**: **704 bytes** (`TelemetrySnapshotV2` = 64-byte `TelemetryHeader` with `bus_count` at offset 48 + `16 × 32-byte` `ChannelMeterFrame` + `4 × 32-byte` `buses[4]`), matched byte-for-byte in C# (`StructLayout(LayoutKind.Sequential, Pack = 4)`).
-- **Magic & Version**: `ATRISWAVE_TELEMETRY_MAGIC = 0x4157544Du` (`"AWTM"`), `ATRISWAVE_TELEMETRY_VERSION = 2u`, `ATRISWAVE_MAX_CHANNELS = 16u`, `ATRISWAVE_MAX_BUSES = 4u`.
+### 4.1 Telemetry Shared Memory: `Local\AtrisWaveTelemetryV3` (`ipc_protocol.h`)
+- **Total Size**: **832 bytes** (`TelemetrySnapshotV3` = 64-byte `TelemetryHeader` with `bus_count` @ offset 48 & `spectrum_bins` @ offset 52 + `16 × 32-byte` `ChannelMeterFrame` + `4 × 32-byte` `buses[4]` + `32 × 4-byte` `spectrum_db[32]`), matched byte-for-byte in C# (`StructLayout(LayoutKind.Sequential, Pack = 4)`).
+- **Magic & Version**: `ATRISWAVE_TELEMETRY_MAGIC = 0x4157544Du` (`"AWTM"`), `ATRISWAVE_TELEMETRY_VERSION = 3u`, `ATRISWAVE_MAX_CHANNELS = 16u`, `ATRISWAVE_MAX_BUSES = 4u`, `ATRISWAVE_SPECTRUM_BINS = 32u`.
 - **Lock-Free Seqlock Protocol**:
   - `TelemetryHeader::sequence` (`uint64_t`, offset 24, 8-byte aligned) is updated with `std::memory_order_relaxed` + `std::atomic_thread_fence(std::memory_order_acq_rel)` before and after every RT write.
   - **Odd sequence** = write in progress; **Even sequence** = stable snapshot.
-  - The C# reader (`SharedMemoryTelemetryReader`) reuses pre-allocated buffers (`TryRead(out TelemetryHeader, Span<ChannelMeterFrame> channels, Span<ChannelMeterFrame> buses)`), reads `sequence` before and after copying, and discards/retries if `sequence` is odd or changed mid-read.
+  - The C# reader (`SharedMemoryTelemetryReader`) reuses pre-allocated buffers (`TryRead(out TelemetryHeader, Span<ChannelMeterFrame> channels, Span<ChannelMeterFrame> buses, Span<float> spectrumDb)`), reads `sequence` before and after copying, and discards/retries if `sequence` is odd or changed mid-read.
 
 ### 4.2 Named Pipe Control: `\\.\pipe\AtrisWaveEngine`
 - **Security**: Constructed with `PIPE_REJECT_REMOTE_CLIENTS` and an explicit **current-user SID DACL** (fail-closed: if building the security descriptor fails, the server refuses to start).
@@ -101,7 +102,7 @@ Every function reachable from the audio callback thread must obey strict real-ti
 While Phase 1 operates **driverlessly** using Windows 10/11 WASAPI Process Loopback (`AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS`) and persistent per-app routing, `driver/` provides **`AtrisWaveVAD.sys`** (SysVAD / WaveRT PortCls) with a **16-slot pooled virtual endpoint architecture** driven by `KSJACK_DESCRIPTION.IsConnected` (`IOCTL_ATRISWAVE_SET_ENDPOINT_CONNECTED`, with Slot 0 protected from disconnect):
 
 - **Ring-Buffer Validation (`ring_buffer_validate.h`)**: Single-read volatile snapshotting of shared header fields (`magic`, `abi_version`, `capacity_frames`, `write_frame_idx`, `read_frame_idx`) onto local stack variables, `UINT64_MAX` overflow clamping, and `STATUS_DEVICE_BUSY` guards on active format changes.
-- **Default-Device Failsafe (`AtrisWaveWatchdog.exe`)**: Monitors `AtrisWaveEngine.exe` and restores the user's physical default playback/capture device from `%LOCALAPPDATA%\AtrisWave\failsafe_defaults.json` on unexpected crash or `CTRL_SHUTDOWN_EVENT`, while respecting manual user overrides and checking `DEVICE_STATE_ACTIVE`.
+- **Default-Device Failsafe (`AtrisWaveWatchdog.exe`)**: Automatically launched by `AtrisWaveEngine.exe` (skipped in `--headless-test`), monitors the engine and restores the user's physical default playback/capture device from `%LOCALAPPDATA%\AtrisWave\failsafe_defaults.json` on unexpected crash or `CTRL_SHUTDOWN_EVENT`, while respecting manual user overrides and checking `DEVICE_STATE_ACTIVE`.
 - **Signing & Distribution**: `driver/scripts/build-and-testsign.ps1` automates WDK builds and RFC 3161 SHA-256 test-signing for local development. Production releases require an **EV Code Signing Certificate** and **Microsoft Hardware Dev Center Attestation Signing** (or WHQL).
 
 ---

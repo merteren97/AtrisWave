@@ -115,6 +115,17 @@ struct V2CommandResult {
     uint32_t channel_id{0};
 };
 
+struct SoundboardPlayResult {
+    bool playing{false};
+    int slot{-1};
+    uint32_t duration_ms{0};
+};
+
+struct SoundboardStatus {
+    uint32_t active_voices{0};
+    uint32_t max_voices{8};
+};
+
 /// Non-RT Win32 Named Pipe control server (`\\.\pipe\AtrisWaveEngine`).
 /// Restricted to the current user via an explicit DACL (fails closed if DACL creation fails).
 /// Rejects remote SMB clients (`PIPE_REJECT_REMOTE_CLIENTS`) and caps pending lines at 64 KiB.
@@ -185,6 +196,17 @@ public:
         [[nodiscard]] virtual V2CommandResult unbind_app_from_channel(const std::string& process_name,
                                                                       uint32_t channel_id) = 0;
         [[nodiscard]] virtual V2CommandResult auto_setup_defaults() = 0;
+
+        // v2.1 Soundboard & Spectrum Analyzer
+        [[nodiscard]] virtual SoundboardPlayResult play_soundboard(const std::string& path,
+                                                                   float gain,
+                                                                   bool send_a1,
+                                                                   bool send_b1,
+                                                                   bool send_b2,
+                                                                   bool loop) = 0;
+        [[nodiscard]] virtual bool stop_soundboard(int slot) = 0;
+        [[nodiscard]] virtual SoundboardStatus get_soundboard_status() = 0;
+        [[nodiscard]] virtual V2CommandResult set_spectrum_source(uint32_t channel_id) = 0;
     };
 
     using StatusProvider = std::function<StatusSnapshot()>;

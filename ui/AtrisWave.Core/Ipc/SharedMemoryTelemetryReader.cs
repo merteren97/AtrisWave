@@ -3,14 +3,15 @@ using System.IO.MemoryMappedFiles;
 namespace AtrisWave.Core.Ipc;
 
 /// <summary>
-/// Seqlock-safe reader for the engine's Telemetry V2 shared-memory block (<c>Local\AtrisWaveTelemetryV2</c>, 704 bytes).
-/// Handles offline state gracefully when the native engine is not running.
+/// Seqlock-safe reader for the engine's Telemetry V3 shared-memory block (<c>Local\AtrisWaveTelemetryV3</c>, 832 bytes).
 /// </summary>
 public sealed class SharedMemoryTelemetryReader : IDisposable
 {
     private const int SequenceFieldOffset = 24;
     private const int BusesBaseOffset = TelemetryConstants.HeaderSizeBytes +
                                         (TelemetryConstants.MaxChannels * TelemetryConstants.ChannelFrameSizeBytes);
+    private const int SpectrumBaseOffset = BusesBaseOffset +
+                                           (TelemetryConstants.MaxBuses * TelemetryConstants.ChannelFrameSizeBytes);
     private const int MaxSeqlockRetries = 8;
 
     private readonly string _mapName;
@@ -32,26 +33,31 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
     {
         var channels = new ChannelMeterFrame[TelemetryConstants.MaxChannels];
         var buses = new ChannelMeterFrame[TelemetryConstants.MaxBuses];
-        if (!TryRead(out TelemetryHeader header, channels, buses))
+        var spectrum = new float[TelemetryConstants.SpectrumBins];
+        if (!TryRead(out TelemetryHeader header, channels, buses, spectrum))
         {
             snapshot = null;
             return false;
         }
 
-        snapshot = new TelemetrySnapshot(header, channels, buses);
+        snapshot = new TelemetrySnapshot(header, channels, buses, spectrum);
         return true;
     }
 
-    public bool TryRead(out TelemetryHeader header, Span<ChannelMeterFrame> channels)
+    public bool TryRead(out TelemetryHeader header, Span<ChannelMeterFrame> channels, Span<ChannelMeterFrame> buses)
     {
-        Span<ChannelMeterFrame> dummyBuses = stackalloc ChannelMeterFrame[TelemetryConstants.MaxBuses];
-        return TryRead(out header, channels, dummyBuses);
+        Span<float> dummySpectrum = stackalloc float[TelemetryConstants.SpectrumBins];
+        return TryRead(out header, channels, buses, dummySpectrum);
     }
 
     /// <summary>
-    /// Zero-allocation Telemetry V2 overload reading up to 16 channels and 4 output buses.
+    /// Zero-allocation Telemetry V3 overload reading all 16 channels, 4 buses, and 32 spectrum bins.
     /// </summary>
-    public bool TryRead(out TelemetryHeader header, Span<ChannelMeterFrame> channels, Span<ChannelMeterFrame> buses)
+    public bool TryRead(
+        out TelemetryHeader header,
+        Span<ChannelMeterFrame> channels,
+        Span<ChannelMeterFrame> buses,
+        Span<float> spectrumDb)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         header = default;
@@ -64,6 +70,11 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
         if (buses.Length < TelemetryConstants.MaxBuses)
         {
             throw new ArgumentException($"Bus buffer must be at least {TelemetryConstants.MaxBuses} elements.", nameof(buses));
+        }
+
+        if (spectrumDb.Length < TelemetryConstants.SpectrumBins)
+        {
+            throw new ArgumentException($"Spectrum buffer must be at least {TelemetryConstants.SpectrumBins} elements.", nameof(spectrumDb));
         }
 
         if (!EnsureConnected())
@@ -104,6 +115,12 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
                 {
                     int offset = BusesBaseOffset + (i * TelemetryConstants.ChannelFrameSizeBytes);
                     accessor.Read(offset, out buses[i]);
+                }
+
+                for (int i = 0; i < TelemetryConstants.SpectrumBins; i++)
+                {
+                    int offset = SpectrumBaseOffset + (i * sizeof(float));
+                    spectrumDb[i] = accessor.ReadSingle(offset);
                 }
 
                 Thread.MemoryBarrier();

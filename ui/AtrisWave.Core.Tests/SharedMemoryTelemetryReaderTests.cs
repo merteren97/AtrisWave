@@ -27,6 +27,7 @@ public sealed class SharedMemoryTelemetryReaderTests
             Version = TelemetryConstants.ProtocolVersion,
             ChannelCount = 6,
             BusCount = 4,
+            SpectrumBins = 32,
             SampleRate = 48000,
             BufferFrames = 256,
             EngineState = (uint)EngineState.Running,
@@ -62,18 +63,23 @@ public sealed class SharedMemoryTelemetryReaderTests
         int busOffset = TelemetryConstants.HeaderSizeBytes + (16 * TelemetryConstants.ChannelFrameSizeBytes);
         writer.Write(busOffset, ref busA1Frame);
 
+        int spectrumOffset = TelemetryConstants.HeaderSizeBytes + (20 * TelemetryConstants.ChannelFrameSizeBytes);
+        writer.Write(spectrumOffset + (10 * sizeof(float)), -18.5f);
+
         using var reader = new SharedMemoryTelemetryReader(mapName);
         Assert.True(reader.TryRead(out TelemetrySnapshot? snapshot));
         Assert.NotNull(snapshot);
         Assert.Equal(EngineState.Running, snapshot.State);
         Assert.Equal(48000u, snapshot.Header.SampleRate);
         Assert.Equal(4u, snapshot.Header.BusCount);
+        Assert.Equal(32u, snapshot.Header.SpectrumBins);
         Assert.Equal(42UL, snapshot.Header.Sequence);
         Assert.Equal(0.85f, snapshot.Channels[1].PeakLeft, precision: 4);
         Assert.True(snapshot.Channels[1].IsActive);
         Assert.True(snapshot.Channels[1].IsClipping);
         Assert.Equal(0.72f, snapshot.Buses[0].PeakLeft, precision: 4);
         Assert.True(snapshot.Buses[0].IsActive);
+        Assert.Equal(-18.5f, snapshot.SpectrumDb[10], precision: 3);
     }
 
     [Fact]
