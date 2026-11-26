@@ -11,6 +11,11 @@ namespace AtrisWave.Core.Ipc;
 /// </summary>
 public sealed record EnginePipeResponse(bool Ok, int Id, JsonElement? Payload, string? Error);
 
+/// <summary>
+/// Structured result carrying parsed data or an explicit error message.
+/// </summary>
+public sealed record PipeResult<T>(bool Ok, T Data, string? Error);
+
 public sealed record SetChannelRequest(
     [property: JsonPropertyName("channel_id")] uint ChannelId,
     [property: JsonPropertyName("volume")] float Volume,
@@ -40,6 +45,8 @@ public sealed class EnginePipeClient : IDisposable
     private int _nextRequestId;
     private bool _disposed;
 
+    public string? LastError { get; private set; }
+
     public EnginePipeClient(
         string pipeName = TelemetryConstants.PipeName,
         TimeSpan? defaultTimeout = null)
@@ -54,7 +61,10 @@ public sealed class EnginePipeClient : IDisposable
     }
 
     public Task<EnginePipeResponse> PingAsync(CancellationToken cancellationToken = default)
-        => SendCommandAsync("ping", null, cancellationToken);
+        => SendCommandAsync("ping", null, null, cancellationToken);
+
+    public Task<EnginePipeResponse> PingAsync(int timeoutMs, CancellationToken cancellationToken = default)
+        => SendCommandAsync("ping", null, TimeSpan.FromMilliseconds(Math.Max(50, timeoutMs)), cancellationToken);
 
     public Task<EnginePipeResponse> GetStatusAsync(CancellationToken cancellationToken = default)
         => SendCommandAsync("get_status", null, cancellationToken);
@@ -62,37 +72,45 @@ public sealed class EnginePipeClient : IDisposable
     public Task<EnginePipeResponse> ShutdownAsync(CancellationToken cancellationToken = default)
         => SendCommandAsync("shutdown", null, cancellationToken);
 
-    public async Task<IReadOnlyList<AudioDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken = default)
+    public async Task<PipeResult<IReadOnlyList<AudioDeviceInfo>>> ListDevicesResultAsync(CancellationToken cancellationToken = default)
     {
         EnginePipeResponse resp = await SendCommandAsync("list_devices", null, cancellationToken).ConfigureAwait(false);
         if (!TryUnwrapResult(resp, out JsonElement result))
         {
-            return [];
+            return new PipeResult<IReadOnlyList<AudioDeviceInfo>>(false, [], resp.Error ?? "Failed to list audio devices.");
         }
 
         if (result.TryGetProperty("devices", out JsonElement devicesEl) && devicesEl.ValueKind == JsonValueKind.Array)
         {
-            return JsonSerializer.Deserialize<List<AudioDeviceInfo>>(devicesEl.GetRawText()) ?? [];
+            List<AudioDeviceInfo> list = JsonSerializer.Deserialize<List<AudioDeviceInfo>>(devicesEl.GetRawText()) ?? [];
+            return new PipeResult<IReadOnlyList<AudioDeviceInfo>>(true, list, null);
         }
 
-        return [];
+        return new PipeResult<IReadOnlyList<AudioDeviceInfo>>(false, [], "Malformed list_devices response from engine.");
     }
 
-    public async Task<IReadOnlyList<AudioSessionInfo>> ListSessionsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AudioDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken = default)
+        => (await ListDevicesResultAsync(cancellationToken).ConfigureAwait(false)).Data;
+
+    public async Task<PipeResult<IReadOnlyList<AudioSessionInfo>>> ListSessionsResultAsync(CancellationToken cancellationToken = default)
     {
         EnginePipeResponse resp = await SendCommandAsync("list_sessions", null, cancellationToken).ConfigureAwait(false);
         if (!TryUnwrapResult(resp, out JsonElement result))
         {
-            return [];
+            return new PipeResult<IReadOnlyList<AudioSessionInfo>>(false, [], resp.Error ?? "Failed to list audio sessions.");
         }
 
         if (result.TryGetProperty("sessions", out JsonElement sessionsEl) && sessionsEl.ValueKind == JsonValueKind.Array)
         {
-            return JsonSerializer.Deserialize<List<AudioSessionInfo>>(sessionsEl.GetRawText()) ?? [];
+            List<AudioSessionInfo> list = JsonSerializer.Deserialize<List<AudioSessionInfo>>(sessionsEl.GetRawText()) ?? [];
+            return new PipeResult<IReadOnlyList<AudioSessionInfo>>(true, list, null);
         }
 
-        return [];
+        return new PipeResult<IReadOnlyList<AudioSessionInfo>>(false, [], "Malformed list_sessions response from engine.");
     }
+
+    public async Task<IReadOnlyList<AudioSessionInfo>> ListSessionsAsync(CancellationToken cancellationToken = default)
+        => (await ListSessionsResultAsync(cancellationToken).ConfigureAwait(false)).Data;
 
     public Task<EnginePipeResponse> SetChannelAsync(
         uint channelId,
@@ -261,6 +279,13 @@ public sealed class EnginePipeClient : IDisposable
         CancellationToken cancellationToken = default)
         => SendCommandAsync("bind_output_bus", new { bus_id = busId, device_id = deviceId, volume, muted }, cancellationToken);
 
+    public Task<EnginePipeResponse> SetOutputBusMixAsync(
+        string busId,
+        float volume,
+        bool muted,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync("set_output_bus_mix", new { bus_id = busId, volume, muted }, cancellationToken);
+
     public Task<EnginePipeResponse> SetChannelSendAsync(
         uint channelId,
         string busId,
@@ -356,24 +381,32 @@ public sealed class EnginePipeClient : IDisposable
         return false;
     }
 
+    public Task<EnginePipeResponse> SendCommandAsync(
+        string command,
+        object? parameters = null,
+        CancellationToken cancellationToken = default)
+        => SendCommandAsync(command, parameters, null, cancellationToken);
+
     /// <summary>
     /// Sends a single newline-delimited JSON command and awaits the single-line JSON response.
     /// </summary>
     public async Task<EnginePipeResponse> SendCommandAsync(
         string command,
-        object? parameters = null,
+        object? parameters,
+        TimeSpan? timeoutOverride,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
 
         int id = Interlocked.Increment(ref _nextRequestId);
+        TimeSpan timeout = timeoutOverride ?? _defaultTimeout;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(_defaultTimeout);
+            timeoutCts.CancelAfter(timeout);
             CancellationToken ct = timeoutCts.Token;
 
             await using var pipe = new NamedPipeClientStream(
@@ -384,11 +417,13 @@ public sealed class EnginePipeClient : IDisposable
 
             try
             {
-                await pipe.ConnectAsync((int)_defaultTimeout.TotalMilliseconds, ct).ConfigureAwait(false);
+                await pipe.ConnectAsync((int)timeout.TotalMilliseconds, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is TimeoutException or IOException or OperationCanceledException)
             {
-                return new EnginePipeResponse(false, id, null, $"Engine offline or unreachable: {ex.Message}");
+                string err = $"Engine offline or unreachable: {ex.Message}";
+                LastError = err;
+                return new EnginePipeResponse(false, id, null, err);
             }
 
             string jsonLine = parameters is null
@@ -404,7 +439,9 @@ public sealed class EnginePipeClient : IDisposable
 
             if (string.IsNullOrWhiteSpace(responseLine))
             {
-                return new EnginePipeResponse(false, id, null, "Empty response from engine.");
+                const string err = "Empty response from engine.";
+                LastError = err;
+                return new EnginePipeResponse(false, id, null, err);
             }
 
             using JsonDocument doc = JsonDocument.Parse(responseLine);
@@ -415,14 +452,18 @@ public sealed class EnginePipeClient : IDisposable
                 ? errProp.GetString()
                 : null;
 
+            LastError = ok ? null : (error ?? "Unknown engine error.");
             return new EnginePipeResponse(ok, id, root, error);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new EnginePipeResponse(false, id, null, "Pipe request timed out.");
+            const string err = "Pipe request timed out.";
+            LastError = err;
+            return new EnginePipeResponse(false, id, null, err);
         }
         catch (Exception ex) when (ex is IOException or JsonException)
         {
+            LastError = ex.Message;
             return new EnginePipeResponse(false, id, null, ex.Message);
         }
         finally

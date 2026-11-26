@@ -47,7 +47,7 @@
                                        VerticalAlignment="Center" />
                             <Slider Grid.Column="1"
                                     Minimum="0"
-                                    Maximum="1.25"
+                                    Maximum="1.5"
                                     Value="{Binding Volume, Mode=TwoWay}"
                                     VerticalAlignment="Center" />
                             <TextBlock Grid.Column="2"

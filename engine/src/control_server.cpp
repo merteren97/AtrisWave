@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace atriswave {
@@ -45,7 +46,7 @@ public:
     }
 
     std::vector<audio::AudioDeviceInfo> list_devices() override {
-        return audio::WasapiDeviceEnumerator::enumerate_devices();
+        return audio::WasapiDeviceEnumerator::enumerate_devices(false);
     }
 
     std::vector<audio::AudioSessionInfo> list_sessions() override {
@@ -113,6 +114,9 @@ public:
     V2CommandResult bind_output_bus(const std::string&, const std::string&, float, bool) override {
         return {false, "unsupported", 0};
     }
+    OutputBusMixResult set_output_bus_mix(const std::string& bus_id, float volume, bool muted) override {
+        return {true, bus_id, volume, muted, {}};
+    }
     V2CommandResult set_channel_send(uint32_t, const std::string&, bool, float) override {
         return {false, "unsupported", 0};
     }
@@ -148,6 +152,10 @@ public:
     [[nodiscard]] HANDLE get() const noexcept { return handle_; }
     [[nodiscard]] bool valid() const noexcept {
         return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
+    }
+
+    HANDLE release() noexcept {
+        return std::exchange(handle_, nullptr);
     }
 
     void reset(HANDLE h = nullptr) noexcept {
@@ -231,27 +239,82 @@ bool create_current_user_sd(PSECURITY_DESCRIPTOR& sd_out) noexcept {
     return sd_out != nullptr;
 }
 
+void append_utf8_codepoint(std::string& out, uint32_t cp) {
+    if (cp <= 0x7Fu) {
+        out.push_back(static_cast<char>(cp));
+    } else if (cp <= 0x7FFu) {
+        out.push_back(static_cast<char>(0xC0u | (cp >> 6)));
+        out.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+    } else if (cp <= 0xFFFFu) {
+        out.push_back(static_cast<char>(0xE0u | (cp >> 12)));
+        out.push_back(static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+    } else if (cp <= 0x10FFFFu) {
+        out.push_back(static_cast<char>(0xF0u | (cp >> 18)));
+        out.push_back(static_cast<char>(0x80u | ((cp >> 12) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+    }
+}
+
+bool parse_hex4(std::string_view s, size_t pos, uint32_t& out) noexcept {
+    if (pos + 4 > s.size()) {
+        return false;
+    }
+    uint32_t v = 0;
+    for (size_t i = 0; i < 4; ++i) {
+        const char ch = s[pos + i];
+        v <<= 4;
+        if (ch >= '0' && ch <= '9') {
+            v |= static_cast<uint32_t>(ch - '0');
+        } else if (ch >= 'a' && ch <= 'f') {
+            v |= static_cast<uint32_t>(ch - 'a' + 10);
+        } else if (ch >= 'A' && ch <= 'F') {
+            v |= static_cast<uint32_t>(ch - 'A' + 10);
+        } else {
+            return false;
+        }
+    }
+    out = v;
+    return true;
+}
+
 std::optional<size_t> find_json_value_start(std::string_view json, std::string_view key) {
-    const std::string needle = "\"" + std::string(key) + "\"";
-    size_t search_from = 0;
-    while (true) {
-        const size_t key_pos = json.find(needle, search_from);
-        if (key_pos == std::string_view::npos) {
+    size_t i = 0;
+    while (i < json.size()) {
+        if (json[i] != '"') {
+            ++i;
+            continue;
+        }
+        const size_t str_start = i + 1;
+        size_t j = str_start;
+        bool has_escape = false;
+        while (j < json.size() && json[j] != '"') {
+            if (json[j] == '\\' && (j + 1) < json.size()) {
+                has_escape = true;
+                j += 2;
+            } else {
+                ++j;
+            }
+        }
+        if (j >= json.size()) {
             return std::nullopt;
         }
-        size_t pos = key_pos + needle.size();
-        while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) {
-            ++pos;
+        const std::string_view token = json.substr(str_start, j - str_start);
+        size_t after = j + 1;
+        while (after < json.size() && std::isspace(static_cast<unsigned char>(json[after]))) {
+            ++after;
         }
-        if (pos < json.size() && json[pos] == ':') {
-            ++pos;
-            while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) {
-                ++pos;
+        if (!has_escape && token == key && after < json.size() && json[after] == ':') {
+            size_t val_pos = after + 1;
+            while (val_pos < json.size() && std::isspace(static_cast<unsigned char>(json[val_pos]))) {
+                ++val_pos;
             }
-            return pos;
+            return val_pos;
         }
-        search_from = key_pos + needle.size();
+        i = j + 1;
     }
+    return std::nullopt;
 }
 
 std::optional<std::string> extract_json_string(std::string_view json, std::string_view key) {
@@ -269,9 +332,46 @@ std::optional<std::string> extract_json_string(std::string_view json, std::strin
     while (pos < json.size() && json[pos] != '"') {
         if (json[pos] == '\\' && (pos + 1) < json.size()) {
             ++pos;
+            const char esc = json[pos];
+            switch (esc) {
+            case '"':  value.push_back('"'); ++pos; break;
+            case '\\': value.push_back('\\'); ++pos; break;
+            case '/':  value.push_back('/'); ++pos; break;
+            case 'b':  value.push_back('\b'); ++pos; break;
+            case 'f':  value.push_back('\f'); ++pos; break;
+            case 'n':  value.push_back('\n'); ++pos; break;
+            case 'r':  value.push_back('\r'); ++pos; break;
+            case 't':  value.push_back('\t'); ++pos; break;
+            case 'u': {
+                uint32_t cp1 = 0;
+                if (parse_hex4(json, pos + 1, cp1)) {
+                    pos += 5;
+                    if (cp1 >= 0xD800u && cp1 <= 0xDBFFu &&
+                        (pos + 6) <= json.size() && json[pos] == '\\' && json[pos + 1] == 'u') {
+                        uint32_t cp2 = 0;
+                        if (parse_hex4(json, pos + 2, cp2) && cp2 >= 0xDC00u && cp2 <= 0xDFFFu) {
+                            const uint32_t combined = 0x10000u + ((cp1 - 0xD800u) << 10) + (cp2 - 0xDC00u);
+                            append_utf8_codepoint(value, combined);
+                            pos += 6;
+                            break;
+                        }
+                    }
+                    append_utf8_codepoint(value, cp1);
+                } else {
+                    value.push_back('u');
+                    ++pos;
+                }
+                break;
+            }
+            default:
+                value.push_back(esc);
+                ++pos;
+                break;
+            }
+        } else {
+            value.push_back(json[pos]);
+            ++pos;
         }
-        value.push_back(json[pos]);
-        ++pos;
     }
     if (pos >= json.size()) {
         return std::nullopt;
@@ -393,6 +493,8 @@ std::string make_err_response(uint64_t id, std::string_view error_code) {
 
 } // namespace
 
+ControlServer::ControlServer() noexcept = default;
+
 ControlServer::~ControlServer() {
     stop();
 }
@@ -437,6 +539,27 @@ bool ControlServer::start(const wchar_t* pipe_name,
     return true;
 }
 
+struct ControlServer::ClientSession {
+    std::mutex pipe_mutex;
+    HANDLE pipe{INVALID_HANDLE_VALUE};
+    std::atomic<bool> done{false};
+    std::thread thread;
+};
+
+void ControlServer::reap_finished_clients_locked() {
+    auto it = clients_.begin();
+    while (it != clients_.end()) {
+        if ((*it)->done.load(std::memory_order_acquire)) {
+            if ((*it)->thread.joinable()) {
+                (*it)->thread.join();
+            }
+            it = clients_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void ControlServer::stop() {
     running_.store(false, std::memory_order_release);
     if (stop_event_ != nullptr) {
@@ -445,6 +568,24 @@ void ControlServer::stop() {
     if (worker_.joinable()) {
         worker_.join();
     }
+
+    std::vector<std::unique_ptr<ClientSession>> active_clients;
+    {
+        std::lock_guard lock(clients_mutex_);
+        active_clients = std::move(clients_);
+    }
+    for (auto& client : active_clients) {
+        {
+            std::lock_guard pipe_lock(client->pipe_mutex);
+            if (client->pipe != INVALID_HANDLE_VALUE && client->pipe != nullptr) {
+                CancelIoEx(client->pipe, nullptr);
+            }
+        }
+        if (client->thread.joinable()) {
+            client->thread.join();
+        }
+    }
+
     if (stop_event_ != nullptr) {
         CloseHandle(static_cast<HANDLE>(stop_event_));
         stop_event_ = nullptr;
@@ -472,7 +613,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"2.3.0-alpha\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.1.0\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -808,6 +949,22 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         return make_ok_response(id, "{\"bound\":true}");
     }
 
+    if (*cmd == "set_output_bus_mix") {
+        const auto bus_id = extract_json_string(line, "bus_id");
+        if (!bus_id.has_value() || bus_id->empty()) {
+            return make_err_response(id, "missing_bus_id");
+        }
+        const float vol = static_cast<float>(extract_json_number(line, "volume").value_or(1.0));
+        const bool muted = extract_json_bool(line, "muted").value_or(false);
+        const auto res = handler_->set_output_bus_mix(*bus_id, vol, muted);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "invalid_bus_id" : res.error);
+        }
+        char buf[128]{};
+        std::snprintf(buf, sizeof(buf), ",\"volume\":%.4f,\"muted\":%s}", res.volume, res.muted ? "true" : "false");
+        return make_ok_response(id, "{\"bus_id\":\"" + audio::json_escape(res.bus_id) + "\"" + buf);
+    }
+
     if (*cmd == "set_channel_send") {
         const auto ch_id = extract_json_uint(line, "channel_id");
         const auto bus_id = extract_json_string(line, "bus_id");
@@ -934,6 +1091,107 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
     return make_err_response(id, "unknown_command");
 }
 
+void ControlServer::handle_client_pipe(void* raw_session) {
+    auto* session = static_cast<ClientSession*>(raw_session);
+    HANDLE raw_pipe = INVALID_HANDLE_VALUE;
+    {
+        std::lock_guard pipe_lock(session->pipe_mutex);
+        raw_pipe = session->pipe;
+    }
+    HANDLE stop_evt = static_cast<HANDLE>(stop_event_);
+    audio::ScopedComInit com(COINIT_MULTITHREADED);
+
+    ScopedHandle io_event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    std::string pending;
+    char read_buf[1024]{};
+    bool client_active = io_event.valid() && raw_pipe != INVALID_HANDLE_VALUE && raw_pipe != nullptr;
+    bool shutdown_requested = false;
+
+    while (client_active && running_.load(std::memory_order_acquire)) {
+        ResetEvent(io_event.get());
+        OVERLAPPED read_ov{};
+        read_ov.hEvent = io_event.get();
+
+        DWORD bytes_read = 0;
+        const BOOL read_ok = ReadFile(
+            raw_pipe,
+            read_buf,
+            static_cast<DWORD>(sizeof(read_buf)),
+            &bytes_read,
+            &read_ov);
+
+        if (!read_ok) {
+            const DWORD err = GetLastError();
+            if (err == ERROR_IO_PENDING) {
+                if (!wait_overlapped(raw_pipe, read_ov, stop_evt, bytes_read)) {
+                    client_active = false;
+                    break;
+                }
+            } else {
+                client_active = false;
+                break;
+            }
+        }
+
+        if (bytes_read == 0) {
+            client_active = false;
+            break;
+        }
+
+        constexpr size_t kMaxPendingBytes = 64 * 1024;
+        if (pending.size() + bytes_read > kMaxPendingBytes) {
+            client_active = false;
+            break;
+        }
+        pending.append(read_buf, bytes_read);
+
+        size_t nl_pos = std::string::npos;
+        while ((nl_pos = pending.find('\n')) != std::string::npos) {
+            std::string line = pending.substr(0, nl_pos);
+            pending.erase(0, nl_pos + 1);
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            if (line.empty()) {
+                continue;
+            }
+
+            bool cmd_shutdown = false;
+            const std::string reply = handle_command_line(line, cmd_shutdown);
+            if (!write_all_overlapped(raw_pipe, reply, stop_evt)) {
+                client_active = false;
+                break;
+            }
+            if (cmd_shutdown) {
+                shutdown_requested = true;
+                client_active = false;
+                break;
+            }
+        }
+    }
+
+    if (raw_pipe != INVALID_HANDLE_VALUE && raw_pipe != nullptr) {
+        if (running_.load(std::memory_order_acquire)) {
+            FlushFileBuffers(raw_pipe);
+        }
+        DisconnectNamedPipe(raw_pipe);
+        std::lock_guard pipe_lock(session->pipe_mutex);
+        CloseHandle(raw_pipe);
+        session->pipe = INVALID_HANDLE_VALUE;
+    }
+    session->done.store(true, std::memory_order_release);
+
+    if (shutdown_requested) {
+        running_.store(false, std::memory_order_release);
+        if (stop_evt != nullptr) {
+            SetEvent(stop_evt);
+        }
+        if (handler_) {
+            handler_->on_shutdown();
+        }
+    }
+}
+
 void ControlServer::server_loop() {
     HANDLE stop_evt = static_cast<HANDLE>(stop_event_);
 
@@ -949,8 +1207,14 @@ void ControlServer::server_loop() {
     sa.lpSecurityDescriptor = sd_guard.get();
     sa.bInheritHandle = FALSE;
 
-    while (running_.load(std::memory_order_acquire)) {
-        ScopedHandle pipe(CreateNamedPipeW(
+    ScopedHandle io_event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!io_event.valid()) {
+        running_.store(false, std::memory_order_release);
+        return;
+    }
+
+    auto create_listening_pipe = [&]() -> HANDLE {
+        return CreateNamedPipeW(
             pipe_name_.c_str(),
             PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
@@ -958,111 +1222,63 @@ void ControlServer::server_loop() {
             65536,
             65536,
             0,
-            &sa));
+            &sa);
+    };
 
-        if (!pipe.valid()) {
-            break;
+    HANDLE next_pipe = create_listening_pipe();
+    if (next_pipe == INVALID_HANDLE_VALUE) {
+        running_.store(false, std::memory_order_release);
+        return;
+    }
+
+    while (running_.load(std::memory_order_acquire)) {
+        if (next_pipe == INVALID_HANDLE_VALUE) {
+            next_pipe = create_listening_pipe();
+            if (next_pipe == INVALID_HANDLE_VALUE) {
+                break;
+            }
         }
 
-        ScopedHandle io_event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-        if (!io_event.valid()) {
-            break;
-        }
-
+        ResetEvent(io_event.get());
         OVERLAPPED connect_ov{};
         connect_ov.hEvent = io_event.get();
 
-        const BOOL connected_now = ConnectNamedPipe(pipe.get(), &connect_ov);
+        const BOOL connected_now = ConnectNamedPipe(next_pipe, &connect_ov);
         if (!connected_now) {
             const DWORD err = GetLastError();
             if (err == ERROR_IO_PENDING) {
                 DWORD dummy = 0;
-                if (!wait_overlapped(pipe.get(), connect_ov, stop_evt, dummy)) {
+                if (!wait_overlapped(next_pipe, connect_ov, stop_evt, dummy)) {
+                    CloseHandle(next_pipe);
+                    next_pipe = INVALID_HANDLE_VALUE;
                     break;
                 }
             } else if (err != ERROR_PIPE_CONNECTED) {
+                CloseHandle(next_pipe);
+                next_pipe = INVALID_HANDLE_VALUE;
                 continue;
             }
         }
 
-        std::string pending;
-        char read_buf[1024]{};
-        bool client_active = true;
-        bool shutdown_requested = false;
+        // Immediately arm the next standby pipe instance before dispatching the client thread
+        HANDLE standby_pipe = running_.load(std::memory_order_acquire)
+            ? create_listening_pipe()
+            : INVALID_HANDLE_VALUE;
 
-        while (client_active && running_.load(std::memory_order_acquire)) {
-            ResetEvent(io_event.get());
-            OVERLAPPED read_ov{};
-            read_ov.hEvent = io_event.get();
+        auto session = std::make_unique<ClientSession>();
+        session->pipe = next_pipe;
+        next_pipe = standby_pipe;
 
-            DWORD bytes_read = 0;
-            const BOOL read_ok = ReadFile(
-                pipe.get(),
-                read_buf,
-                static_cast<DWORD>(sizeof(read_buf)),
-                &bytes_read,
-                &read_ov);
+        ClientSession* session_ptr = session.get();
+        session->thread = std::thread(&ControlServer::handle_client_pipe, this, session_ptr);
 
-            if (!read_ok) {
-                const DWORD err = GetLastError();
-                if (err == ERROR_IO_PENDING) {
-                    if (!wait_overlapped(pipe.get(), read_ov, stop_evt, bytes_read)) {
-                        client_active = false;
-                        break;
-                    }
-                } else {
-                    client_active = false;
-                    break;
-                }
-            }
+        std::lock_guard lock(clients_mutex_);
+        reap_finished_clients_locked();
+        clients_.push_back(std::move(session));
+    }
 
-            if (bytes_read == 0) {
-                client_active = false;
-                break;
-            }
-
-            constexpr size_t kMaxPendingBytes = 64 * 1024;
-            if (pending.size() + bytes_read > kMaxPendingBytes) {
-                client_active = false;
-                break;
-            }
-            pending.append(read_buf, bytes_read);
-
-            size_t nl_pos = std::string::npos;
-            while ((nl_pos = pending.find('\n')) != std::string::npos) {
-                std::string line = pending.substr(0, nl_pos);
-                pending.erase(0, nl_pos + 1);
-                if (!line.empty() && line.back() == '\r') {
-                    line.pop_back();
-                }
-                if (line.empty()) {
-                    continue;
-                }
-
-                bool cmd_shutdown = false;
-                const std::string reply = handle_command_line(line, cmd_shutdown);
-                if (!write_all_overlapped(pipe.get(), reply, stop_evt)) {
-                    client_active = false;
-                    break;
-                }
-                if (cmd_shutdown) {
-                    shutdown_requested = true;
-                    client_active = false;
-                    break;
-                }
-            }
-        }
-
-        FlushFileBuffers(pipe.get());
-        DisconnectNamedPipe(pipe.get());
-
-        if (shutdown_requested) {
-            running_.store(false, std::memory_order_release);
-            if (handler_) {
-                handler_->on_shutdown();
-            }
-            break;
-        }
+    if (next_pipe != INVALID_HANDLE_VALUE) {
+        CloseHandle(next_pipe);
     }
 
     running_.store(false, std::memory_order_release);

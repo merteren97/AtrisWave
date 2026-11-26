@@ -157,7 +157,9 @@
                             <DataGridTemplateColumn Header="{DynamicResource Routing_ColTargetDevice}" Width="1.8*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <ComboBox ItemsSource="{Binding DataContext.OutputDevices, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        <ComboBox MinHeight="30"
+                                                  Padding="8,4"
+                                                  ItemsSource="{Binding DataContext.OutputDevices, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                                   SelectedValue="{Binding TargetDeviceId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   SelectedValuePath="Id"
                                                   DisplayMemberPath="Name"
@@ -177,6 +179,23 @@
                             </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
+
+                    <Border Grid.Row="1"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Padding="20,14"
+                            CornerRadius="10"
+                            Background="#CC111827"
+                            BorderBrush="#22FFFFFF"
+                            BorderThickness="1"
+                            Visibility="{Binding HasNoAudioSessions, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="{DynamicResource Routing_NoSessions}"
+                                   Foreground="#94A3B8"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   MaxWidth="360" />
+                    </Border>
                 </Grid>
             </Border>
 

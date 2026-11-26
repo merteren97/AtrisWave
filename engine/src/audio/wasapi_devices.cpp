@@ -23,21 +23,27 @@ std::string to_lower_ascii(std::string_view s) {
 }
 
 std::string get_default_device_id(IMMDeviceEnumerator* enumerator, EDataFlow flow) {
-    ComPtr<IMMDevice> def_dev;
-    if (FAILED(enumerator->GetDefaultAudioEndpoint(flow, eMultimedia, def_dev.put())) || !def_dev) {
-        return {};
+    constexpr ERole kRoles[3] = {eMultimedia, eConsole, eCommunications};
+    for (ERole role : kRoles) {
+        ComPtr<IMMDevice> def_dev;
+        if (FAILED(enumerator->GetDefaultAudioEndpoint(flow, role, def_dev.put())) || !def_dev) {
+            continue;
+        }
+        LPWSTR raw_id = nullptr;
+        if (SUCCEEDED(def_dev->GetId(&raw_id)) && raw_id != nullptr) {
+            std::string id = wide_to_utf8(raw_id);
+            CoTaskMemFree(raw_id);
+            if (!id.empty()) {
+                return id;
+            }
+        }
     }
-    LPWSTR raw_id = nullptr;
-    if (FAILED(def_dev->GetId(&raw_id)) || raw_id == nullptr) {
-        return {};
-    }
-    std::string id = wide_to_utf8(raw_id);
-    CoTaskMemFree(raw_id);
-    return id;
+    return {};
 }
 
 void enumerate_flow(IMMDeviceEnumerator* enumerator,
                     EDataFlow flow,
+                    bool query_mix_format,
                     std::vector<AudioDeviceInfo>& out) {
     const std::string default_id = get_default_device_id(enumerator, flow);
 
@@ -87,14 +93,16 @@ void enumerate_flow(IMMDeviceEnumerator* enumerator,
         info.is_virtual = WasapiDeviceEnumerator::is_virtual_device_name(info.name);
         info.virtual_pair_group = WasapiDeviceEnumerator::detect_virtual_pair_group(info.name);
 
-        ComPtr<IAudioClient> audio_client;
-        if (SUCCEEDED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, audio_client.put_void())) &&
-            audio_client) {
-            WAVEFORMATEX* mix_fmt = nullptr;
-            if (SUCCEEDED(audio_client->GetMixFormat(&mix_fmt)) && mix_fmt != nullptr) {
-                info.sample_rate = mix_fmt->nSamplesPerSec;
-                info.channels = mix_fmt->nChannels;
-                CoTaskMemFree(mix_fmt);
+        if (query_mix_format) {
+            ComPtr<IAudioClient> audio_client;
+            if (SUCCEEDED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, audio_client.put_void())) &&
+                audio_client) {
+                WAVEFORMATEX* mix_fmt = nullptr;
+                if (SUCCEEDED(audio_client->GetMixFormat(&mix_fmt)) && mix_fmt != nullptr) {
+                    info.sample_rate = mix_fmt->nSamplesPerSec;
+                    info.channels = mix_fmt->nChannels;
+                    CoTaskMemFree(mix_fmt);
+                }
             }
         }
 
@@ -145,7 +153,7 @@ std::string WasapiDeviceEnumerator::detect_virtual_pair_group(std::string_view n
     return {};
 }
 
-std::vector<AudioDeviceInfo> WasapiDeviceEnumerator::enumerate_devices() {
+std::vector<AudioDeviceInfo> WasapiDeviceEnumerator::enumerate_devices(bool query_mix_format) {
     ScopedComInit com;
     std::vector<AudioDeviceInfo> devices;
     if (!com.ok()) {
@@ -164,8 +172,8 @@ std::vector<AudioDeviceInfo> WasapiDeviceEnumerator::enumerate_devices() {
         return devices;
     }
 
-    enumerate_flow(enumerator.get(), eCapture, devices);
-    enumerate_flow(enumerator.get(), eRender, devices);
+    enumerate_flow(enumerator.get(), eCapture, query_mix_format, devices);
+    enumerate_flow(enumerator.get(), eRender, query_mix_format, devices);
     return devices;
 }
 

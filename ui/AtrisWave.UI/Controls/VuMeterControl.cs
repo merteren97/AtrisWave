@@ -20,22 +20,22 @@ public sealed class VuMeterControl : SKElement
     private const float MinDb = -60.0f;
 
     public static readonly DependencyProperty PeakLeftProperty = DependencyProperty.Register(
-        nameof(PeakLeft), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f));
+        nameof(PeakLeft), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f, OnMeterInputChanged));
 
     public static readonly DependencyProperty PeakRightProperty = DependencyProperty.Register(
-        nameof(PeakRight), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f));
+        nameof(PeakRight), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f, OnMeterInputChanged));
 
     public static readonly DependencyProperty RmsLeftProperty = DependencyProperty.Register(
-        nameof(RmsLeft), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f));
+        nameof(RmsLeft), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f, OnMeterInputChanged));
 
     public static readonly DependencyProperty RmsRightProperty = DependencyProperty.Register(
-        nameof(RmsRight), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f));
+        nameof(RmsRight), typeof(float), typeof(VuMeterControl), new PropertyMetadata(0.0f, OnMeterInputChanged));
 
     public static readonly DependencyProperty IsMutedProperty = DependencyProperty.Register(
-        nameof(IsMuted), typeof(bool), typeof(VuMeterControl), new PropertyMetadata(false));
+        nameof(IsMuted), typeof(bool), typeof(VuMeterControl), new PropertyMetadata(false, OnMeterInputChanged));
 
     public static readonly DependencyProperty IsClippingProperty = DependencyProperty.Register(
-        nameof(IsClipping), typeof(bool), typeof(VuMeterControl), new PropertyMetadata(false));
+        nameof(IsClipping), typeof(bool), typeof(VuMeterControl), new PropertyMetadata(false, OnMeterInputChanged));
 
     public float PeakLeft
     {
@@ -109,6 +109,25 @@ public sealed class VuMeterControl : SKElement
         IsVisibleChanged += OnVisibilityChanged;
     }
 
+    private bool _isSettledAtZero = true;
+
+    private static void OnMeterInputChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is VuMeterControl ctrl)
+        {
+            ctrl._isSettledAtZero = false;
+            if (ctrl._isRenderingSubscribed)
+            {
+                return;
+            }
+            ctrl.UpdateRenderingSubscription();
+            ctrl.InvalidateVisual();
+        }
+    }
+
+    private bool HasActiveInput()
+        => PeakLeft > 0.0005f || PeakRight > 0.0005f || RmsLeft > 0.0005f || RmsRight > 0.0005f || IsClipping;
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         AttachHostWindow();
@@ -160,9 +179,8 @@ public sealed class VuMeterControl : SKElement
 
     private void UpdateRenderingSubscription()
     {
-        bool shouldRender = IsLoaded &&
-                            IsVisible &&
-                            (_hostWindow is null || (_hostWindow.IsVisible && _hostWindow.WindowState != WindowState.Minimized));
+        bool windowVisible = _hostWindow is null || (_hostWindow.IsVisible && _hostWindow.WindowState != WindowState.Minimized);
+        bool shouldRender = IsLoaded && IsVisible && windowVisible && (!_isSettledAtZero || HasActiveInput());
 
         if (shouldRender && !_isRenderingSubscribed)
         {
@@ -202,6 +220,16 @@ public sealed class VuMeterControl : SKElement
 
         UpdateBallistics(dtSec, elapsedMs);
         InvalidateVisual();
+
+        if (!HasActiveInput() &&
+            _dispRmsL < 0.0005f && _dispRmsR < 0.0005f &&
+            _dispPeakL < 0.0005f && _dispPeakR < 0.0005f &&
+            _holdPeakL < 0.005f && _holdPeakR < 0.005f)
+        {
+            _dispRmsL = _dispRmsR = _dispPeakL = _dispPeakR = _holdPeakL = _holdPeakR = 0f;
+            _isSettledAtZero = true;
+            UnsubscribeRendering();
+        }
     }
 
     private void UpdateBallistics(float dtSec, double elapsedMs)

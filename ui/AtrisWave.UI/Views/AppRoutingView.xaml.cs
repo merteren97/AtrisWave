@@ -25,11 +25,20 @@ public partial class AppRoutingView : UserControl
     }
 
     private void OnSessionsGridPreviewMouseDown(object sender, MouseButtonEventArgs e)
-        => _dragStartPoint = e.GetPosition(null);
+    {
+        if (IsInteractiveChild(e.OriginalSource as DependencyObject))
+        {
+            _dragStartPoint = new Point(double.NaN, double.NaN);
+            return;
+        }
+
+        _dragStartPoint = e.GetPosition(null);
+    }
 
     private void OnSessionsGridMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (e.LeftButton != MouseButtonState.Pressed || double.IsNaN(_dragStartPoint.X)) return;
+        if (IsInteractiveChild(e.OriginalSource as DependencyObject)) return;
 
         Point pos = e.GetPosition(null);
         Vector diff = _dragStartPoint - pos;
@@ -41,6 +50,26 @@ public partial class AppRoutingView : UserControl
                 DragDrop.DoDragDrop(grid, new DataObject(typeof(AudioSessionInfo), session), DragDropEffects.Copy);
             }
         }
+    }
+
+    private static bool IsInteractiveChild(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ComboBox or ComboBoxItem or System.Windows.Controls.Primitives.ButtonBase or System.Windows.Controls.Primitives.ScrollBar or System.Windows.Controls.Primitives.Thumb)
+            {
+                return true;
+            }
+
+            if (source is DataGrid)
+            {
+                return false;
+            }
+
+            source = System.Windows.Media.VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 
     private void OnChannelPillDragOver(object sender, DragEventArgs e)

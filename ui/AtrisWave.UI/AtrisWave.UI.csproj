@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <Version>2.3.0-alpha</Version>
+    <Version>0.1.0</Version>
     <ApplicationTitle>AtrisWave</ApplicationTitle>
     <ApplicationIcon>Resources\atriswave.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);NU1701</NoWarn>
@@ -26,5 +26,22 @@
   <ItemGroup>
     <ProjectReference Include="..\AtrisWave.Core\AtrisWave.Core.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyNativeEngineBinaries" AfterTargets="Build">
+    <PropertyGroup>
+      <_EngineReleaseDir>$(MSBuildProjectDirectory)\..\..\engine\build\msvc-release</_EngineReleaseDir>
+      <_EngineDebugDir>$(MSBuildProjectDirectory)\..\..\engine\build\msvc-debug</_EngineDebugDir>
+      <_EngineSourceDir Condition="Exists('$(_EngineReleaseDir)\AtrisWaveEngine.exe')">$(_EngineReleaseDir)</_EngineSourceDir>
+      <_EngineSourceDir Condition="'$(_EngineSourceDir)' == '' and Exists('$(_EngineDebugDir)\AtrisWaveEngine.exe')">$(_EngineDebugDir)</_EngineSourceDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(_EngineSourceDir)\AtrisWaveEngine.exe"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true"
+          Condition="'$(_EngineSourceDir)' != '' and Exists('$(_EngineSourceDir)\AtrisWaveEngine.exe')" />
+    <Copy SourceFiles="$(_EngineSourceDir)\AtrisWaveWatchdog.exe"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true"
+          Condition="'$(_EngineSourceDir)' != '' and Exists('$(_EngineSourceDir)\AtrisWaveWatchdog.exe')" />
+  </Target>
 
 </Project>

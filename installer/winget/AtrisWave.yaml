@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
 PackageIdentifier: AtrisWave.AtrisWave
-PackageVersion: 2.3.0-alpha
+PackageVersion: 0.1.0
 PackageLocale: en-US
 Publisher: AtrisWave Contributors
 PublisherUrl: https://github.com/merteren97/AtrisWave
@@ -30,7 +30,7 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/merteren97/AtrisWave/releases/download/v2.3.0-alpha/AtrisWave-Setup-2.3.0-alpha-win-x64.exe
+    InstallerUrl: https://github.com/merteren97/AtrisWave/releases/download/v0.1.0/AtrisWave-Setup-0.1.0-win-x64.exe
     InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
 ManifestType: singleton
 ManifestVersion: 1.6.0

@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -128,6 +129,14 @@ struct SoundboardStatus {
     uint32_t max_voices{8};
 };
 
+struct OutputBusMixResult {
+    bool ok{false};
+    std::string bus_id;
+    float volume{1.0f};
+    bool muted{false};
+    std::string error;
+};
+
 /// Non-RT Win32 Named Pipe control server (`\\.\pipe\AtrisWaveEngine`).
 /// Restricted to the current user via an explicit DACL (fails closed if DACL creation fails).
 /// Rejects remote SMB clients (`PIPE_REJECT_REMOTE_CLIENTS`) and caps pending lines at 64 KiB.
@@ -188,6 +197,9 @@ public:
                                                               const std::string& device_id,
                                                               float volume,
                                                               bool muted) = 0;
+        [[nodiscard]] virtual OutputBusMixResult set_output_bus_mix(const std::string& bus_id,
+                                                                    float volume,
+                                                                    bool muted) = 0;
         [[nodiscard]] virtual V2CommandResult set_channel_send(uint32_t channel_id,
                                                                const std::string& bus_id,
                                                                bool enabled,
@@ -214,7 +226,7 @@ public:
     using StatusProvider = std::function<StatusSnapshot()>;
     using ShutdownCallback = std::function<void()>;
 
-    ControlServer() noexcept = default;
+    ControlServer() noexcept;
     ~ControlServer();
 
     ControlServer(const ControlServer&) = delete;
@@ -237,7 +249,11 @@ public:
     }
 
 private:
+    struct ClientSession;
+
     void server_loop();
+    void handle_client_pipe(void* raw_pipe);
+    void reap_finished_clients_locked();
     [[nodiscard]] std::string handle_command_line(const std::string& line, bool& should_shutdown);
 
     std::wstring pipe_name_;
@@ -247,6 +263,8 @@ private:
     void* stop_event_{nullptr};
     std::atomic<bool> running_{false};
     std::thread worker_;
+    std::mutex clients_mutex_;
+    std::vector<std::unique_ptr<ClientSession>> clients_;
 };
 
 } // namespace atriswave

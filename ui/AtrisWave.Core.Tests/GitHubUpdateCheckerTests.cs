@@ -8,39 +8,46 @@ namespace AtrisWave.Core.Tests;
 public sealed class GitHubUpdateCheckerTests
 {
     [Theory]
-    [InlineData("2.1.0-alpha", "v2.1.0", true)]
-    [InlineData("2.1.0-alpha", "v2.2.0", true)]
-    [InlineData("2.1.0", "v2.1.1", true)]
-    [InlineData("2.1.0", "v2.1.0", false)]
-    [InlineData("2.1.0", "v2.1.0-rc1", false)]
-    [InlineData("2.2.0", "v2.1.9", false)]
+    [InlineData("0.1.0-alpha", "v0.1.0", true)]
+    [InlineData("0.1.0", "v0.1.1", true)]
+    [InlineData("0.1.0", "v0.2.0", true)]
+    [InlineData("0.1.0", "v0.1.0", false)]
+    [InlineData("0.1.0", "v0.1.0-rc1", false)]
+    [InlineData("0.2.0", "v0.1.9", false)]
     public void IsNewerVersion_ComparesSemVerCorrectly(string current, string latest, bool expectedNewer)
     {
         Assert.Equal(expectedNewer, GitHubUpdateChecker.IsNewerVersion(current, latest));
     }
 
     [Fact]
-    public void ParseReleasesJson_ExtractsPrereleaseInstallerAndChecksums()
+    public void ParseReleasesJson_SkipsDraftsAndPrereleases_ExtractsStableInstallerAndChecksums()
     {
         const string json = """
             [
               {
-                "tag_name": "v2.5.0-alpha",
+                "tag_name": "v0.3.0",
                 "draft": true,
-                "prerelease": true,
-                "html_url": "https://github.com/merteren97/AtrisWave/releases/tag/v2.5.0-alpha",
+                "prerelease": false,
+                "html_url": "https://github.com/merteren97/AtrisWave/releases/tag/v0.3.0",
                 "assets": []
               },
               {
-                "tag_name": "v2.4.0-alpha",
+                "tag_name": "v0.2.0-alpha",
                 "draft": false,
                 "prerelease": true,
-                "html_url": "https://github.com/merteren97/AtrisWave/releases/tag/v2.4.0-alpha",
+                "html_url": "https://github.com/merteren97/AtrisWave/releases/tag/v0.2.0-alpha",
+                "assets": []
+              },
+              {
+                "tag_name": "v0.1.1",
+                "draft": false,
+                "prerelease": false,
+                "html_url": "https://github.com/merteren97/AtrisWave/releases/tag/v0.1.1",
                 "body": "Release notes here",
                 "assets": [
                   {
-                    "name": "AtrisWave-Setup-2.4.0-alpha.exe",
-                    "browser_download_url": "https://example.com/AtrisWave-Setup-2.4.0-alpha.exe"
+                    "name": "AtrisWave-Setup-0.1.1-win-x64.exe",
+                    "browser_download_url": "https://example.com/AtrisWave-Setup-0.1.1-win-x64.exe"
                   },
                   {
                     "name": "SHA256SUMS.txt",
@@ -51,12 +58,12 @@ public sealed class GitHubUpdateCheckerTests
             ]
             """;
 
-        UpdateCheckResult res = GitHubUpdateChecker.ParseReleasesJson(json, "2.3.0-alpha");
+        UpdateCheckResult res = GitHubUpdateChecker.ParseReleasesJson(json, "0.1.0");
         Assert.True(res.Success);
         Assert.True(res.UpdateAvailable);
-        Assert.Equal("v2.4.0-alpha", res.LatestVersion);
-        Assert.True(res.IsPrerelease);
-        Assert.Equal("https://example.com/AtrisWave-Setup-2.4.0-alpha.exe", res.InstallerDownloadUrl);
+        Assert.Equal("v0.1.1", res.LatestVersion);
+        Assert.False(res.IsPrerelease);
+        Assert.Equal("https://example.com/AtrisWave-Setup-0.1.1-win-x64.exe", res.InstallerDownloadUrl);
         Assert.Equal("https://example.com/SHA256SUMS.txt", res.ChecksumsDownloadUrl);
         Assert.Equal("Release notes here", res.ReleaseNotes);
     }
@@ -71,10 +78,10 @@ public sealed class GitHubUpdateCheckerTests
         try
         {
             string expectedHex = Convert.ToHexStringLower(SHA256.HashData(payload));
-            string sumsText = $"{expectedHex}  AtrisWave-Setup-2.4.0-alpha.exe\n";
+            string sumsText = $"{expectedHex}  AtrisWave-Setup-0.1.1-win-x64.exe\n";
 
             IReadOnlyDictionary<string, string> parsed = AppUpdaterService.ParseSha256Sums(sumsText);
-            Assert.True(parsed.TryGetValue("AtrisWave-Setup-2.4.0-alpha.exe", out string? hash));
+            Assert.True(parsed.TryGetValue("AtrisWave-Setup-0.1.1-win-x64.exe", out string? hash));
             Assert.Equal(expectedHex, hash);
 
             Assert.True(await AppUpdaterService.VerifyFileSha256Async(tempFile, expectedHex));
@@ -90,7 +97,7 @@ public sealed class GitHubUpdateCheckerTests
     }
 
     [Theory]
-    [InlineData("https://github.com/merteren97/AtrisWave/releases/download/v2.3.0-alpha/AtrisWave-Setup.exe", true)]
+    [InlineData("https://github.com/merteren97/AtrisWave/releases/download/v0.1.0/AtrisWave-Setup.exe", true)]
     [InlineData("https://objects.githubusercontent.com/github-production-release-asset/foo.exe", true)]
     [InlineData("http://github.com/merteren97/AtrisWave/foo.exe", false)]
     [InlineData("https://evil.example.com/AtrisWave-Setup.exe", false)]
@@ -107,12 +114,12 @@ public sealed class GitHubUpdateCheckerTests
             AppUpdaterService.DownloadAndVerifyInstallerAsync(
                 "http://github.com/merteren97/AtrisWave/setup.exe",
                 null,
-                "v2.3.0-alpha"));
+                "v0.1.0"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             AppUpdaterService.DownloadAndVerifyInstallerAsync(
                 "https://github.com/merteren97/AtrisWave/setup.exe",
                 "https://evil.example.com/SHA256SUMS.txt",
-                "v2.3.0-alpha"));
+                "v0.1.0"));
     }
 }

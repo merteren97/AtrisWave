@@ -135,7 +135,7 @@ public sealed class RotaryKnobControl : SKElement
         if (w < 24 || h < 24) return;
 
         float dpi = ActualWidth > 0 ? w / (float)ActualWidth : 1f;
-        float topAreaH = h - (22f * dpi);
+        float topAreaH = h - (26f * dpi);
         float radius = MathF.Max(10f, MathF.Min(w, topAreaH) * 0.36f);
         float cx = w * 0.5f;
         float cy = (topAreaH * 0.5f) + (2f * dpi);
@@ -174,11 +174,11 @@ public sealed class RotaryKnobControl : SKElement
         _valueFont.Size = 9.5f * dpi;
         _labelFont.Size = 9.5f * dpi;
         string valText = string.IsNullOrEmpty(Unit) ? $"{Value:0.0}" : $"{Value:0.0}{Unit}";
-        canvas.DrawText(valText, cx, h - (11f * dpi), SKTextAlign.Center, _valueFont, _textPaint);
+        canvas.DrawText(valText, cx, h - (14f * dpi), SKTextAlign.Center, _valueFont, _textPaint);
 
         if (!string.IsNullOrEmpty(Label))
         {
-            canvas.DrawText(Label, cx, h - (1f * dpi), SKTextAlign.Center, _labelFont, _labelPaint);
+            canvas.DrawText(Label, cx, h - (3.5f * dpi), SKTextAlign.Center, _labelFont, _labelPaint);
         }
     }
 }

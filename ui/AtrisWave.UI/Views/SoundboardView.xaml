@@ -84,9 +84,9 @@
                                                                  Minimum="0"
                                                                  Maximum="1.5"
                                                                  DefaultValue="1.0"
-                                                                 Label="Gain"
+                                                                 Label="{DynamicResource Knob_Gain}"
                                                                  AccentColor="{Binding AccentColor}"
-                                                                 Height="74" />
+                                                                 Height="76" />
 
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
                                         <TextBlock Text="{Binding FileNameDisplay}"
@@ -95,15 +95,16 @@
                                                    TextTrimming="CharacterEllipsis"
                                                    Margin="0,0,0,6" />
                                         <UniformGrid Rows="1" Columns="3">
-                                            <ToggleButton Content="{DynamicResource Ch_SendA1}" IsChecked="{Binding SendA1, Mode=TwoWay}" Height="22" FontSize="10" Margin="0,0,2,0" />
-                                            <ToggleButton Content="{DynamicResource Ch_SendB1}" IsChecked="{Binding SendB1, Mode=TwoWay}" Height="22" FontSize="10" Margin="1,0" />
-                                            <ToggleButton Content="{DynamicResource Ch_SendB2}" IsChecked="{Binding SendB2, Mode=TwoWay}" Height="22" FontSize="10" Margin="2,0,0,0" />
+                                            <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Ch_SendA1}" IsChecked="{Binding SendA1, Mode=TwoWay}" Height="22" Padding="2,0" FontSize="10" Margin="0,0,2,0" />
+                                            <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Ch_SendB1}" IsChecked="{Binding SendB1, Mode=TwoWay}" Height="22" Padding="2,0" FontSize="10" Margin="1,0" />
+                                            <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Ch_SendB2}" IsChecked="{Binding SendB2, Mode=TwoWay}" Height="22" Padding="2,0" FontSize="10" Margin="2,0,0,0" />
                                         </UniformGrid>
                                     </StackPanel>
                                 </Grid>
 
                                 <DockPanel Grid.Row="3">
                                     <ToggleButton DockPanel.Dock="Right"
+                                                  Style="{StaticResource StudioToggleButtonStyle}"
                                                   Content="{DynamicResource Sb_Loop}"
                                                   IsChecked="{Binding Loop, Mode=TwoWay}"
                                                   Margin="6,0,0,0"

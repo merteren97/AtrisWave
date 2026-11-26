@@ -1,4 +1,5 @@
 using System.IO.MemoryMappedFiles;
+using System.Runtime.InteropServices;
 
 namespace AtrisWave.Core.Ipc;
 
@@ -13,10 +14,18 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
     private const int SpectrumBaseOffset = BusesBaseOffset +
                                            (TelemetryConstants.MaxBuses * TelemetryConstants.ChannelFrameSizeBytes);
     private const int MaxSeqlockRetries = 8;
+    private const long ReconnectCooldownMs = 750;
+    private const long StaleTelemetryThresholdMs = 1500;
 
     private readonly string _mapName;
+    private readonly byte[] _snapshotBuffer = new byte[TelemetryConstants.TotalSnapshotSizeBytes];
     private MemoryMappedFile? _mmf;
     private MemoryMappedViewAccessor? _accessor;
+    private long _lastConnectAttemptTickMs;
+    private ulong _lastSeenSequence;
+    private ulong _lastSeenQpc;
+    private long _lastFreshTickMs;
+    private bool _hasSeenSnapshot;
     private bool _disposed;
 
     public SharedMemoryTelemetryReader(string mapName = TelemetryConstants.SharedMemoryName)
@@ -97,7 +106,18 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
                     continue;
                 }
 
-                accessor.Read(0, out header);
+                accessor.ReadArray(0, _snapshotBuffer, 0, TelemetryConstants.TotalSnapshotSizeBytes);
+
+                Thread.MemoryBarrier();
+                ulong seqEnd = accessor.ReadUInt64(SequenceFieldOffset);
+
+                if (seqStart != seqEnd)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> buf = _snapshotBuffer;
+                header = MemoryMarshal.Read<TelemetryHeader>(buf[..TelemetryConstants.HeaderSizeBytes]);
 
                 if (header.Magic != TelemetryConstants.Magic ||
                     header.Version != TelemetryConstants.ProtocolVersion)
@@ -105,31 +125,33 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
                     return false;
                 }
 
-                for (int i = 0; i < TelemetryConstants.MaxChannels; i++)
+                MemoryMarshal.Cast<byte, ChannelMeterFrame>(
+                    buf.Slice(TelemetryConstants.HeaderSizeBytes, TelemetryConstants.MaxChannels * TelemetryConstants.ChannelFrameSizeBytes))
+                    .CopyTo(channels);
+
+                MemoryMarshal.Cast<byte, ChannelMeterFrame>(
+                    buf.Slice(BusesBaseOffset, TelemetryConstants.MaxBuses * TelemetryConstants.ChannelFrameSizeBytes))
+                    .CopyTo(buses);
+
+                MemoryMarshal.Cast<byte, float>(
+                    buf.Slice(SpectrumBaseOffset, TelemetryConstants.SpectrumBytes))
+                    .CopyTo(spectrumDb);
+
+                long nowTick = Environment.TickCount64;
+                if (!_hasSeenSnapshot || header.Sequence != _lastSeenSequence || header.TimestampQpc != _lastSeenQpc)
                 {
-                    int offset = TelemetryConstants.HeaderSizeBytes + (i * TelemetryConstants.ChannelFrameSizeBytes);
-                    accessor.Read(offset, out channels[i]);
+                    _hasSeenSnapshot = true;
+                    _lastSeenSequence = header.Sequence;
+                    _lastSeenQpc = header.TimestampQpc;
+                    _lastFreshTickMs = nowTick;
+                }
+                else if (nowTick - _lastFreshTickMs > StaleTelemetryThresholdMs)
+                {
+                    ResetConnection();
+                    return false;
                 }
 
-                for (int i = 0; i < TelemetryConstants.MaxBuses; i++)
-                {
-                    int offset = BusesBaseOffset + (i * TelemetryConstants.ChannelFrameSizeBytes);
-                    accessor.Read(offset, out buses[i]);
-                }
-
-                for (int i = 0; i < TelemetryConstants.SpectrumBins; i++)
-                {
-                    int offset = SpectrumBaseOffset + (i * sizeof(float));
-                    spectrumDb[i] = accessor.ReadSingle(offset);
-                }
-
-                Thread.MemoryBarrier();
-                ulong seqEnd = accessor.ReadUInt64(SequenceFieldOffset);
-
-                if (seqStart == seqEnd)
-                {
-                    return true;
-                }
+                return true;
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or UnauthorizedAccessException)
@@ -147,6 +169,13 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
         {
             return true;
         }
+
+        long now = Environment.TickCount64;
+        if (_lastConnectAttemptTickMs != 0 && (now - _lastConnectAttemptTickMs) < ReconnectCooldownMs)
+        {
+            return false;
+        }
+        _lastConnectAttemptTickMs = now;
 
         try
         {
@@ -167,6 +196,10 @@ public sealed class SharedMemoryTelemetryReader : IDisposable
         _accessor = null;
         _mmf?.Dispose();
         _mmf = null;
+        _hasSeenSnapshot = false;
+        _lastSeenSequence = 0;
+        _lastSeenQpc = 0;
+        _lastFreshTickMs = 0;
     }
 
     public void Dispose()

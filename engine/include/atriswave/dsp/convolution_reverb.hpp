@@ -36,7 +36,8 @@ public:
 
     void prepare(double sample_rate) {
         sample_rate_ = std::clamp(sample_rate, 8000.0, 192000.0);
-        load_preset(preset_);
+        precompute_builtin_presets();
+        set_preset(preset_);
         reset();
     }
 
@@ -60,11 +61,17 @@ public:
         dry_ = std::clamp(dry, 0.0f, 1.0f);
     }
 
-    void set_preset(IrPreset preset) {
-        if (preset == preset_ && active_partitions_ > 0) {
-            return;
+    void set_preset(IrPreset preset) noexcept {
+        const std::size_t idx = preset_index(preset);
+        preset_ = preset;
+        const auto& tbl = preset_tables_[idx];
+        if (!tbl.ir_l_re.empty()) {
+            active_ir_l_re_ = tbl.ir_l_re.data();
+            active_ir_l_im_ = tbl.ir_l_im.data();
+            active_ir_r_re_ = tbl.ir_r_re.data();
+            active_ir_r_im_ = tbl.ir_r_im.data();
+            active_partitions_ = tbl.active_partitions;
         }
-        load_preset(preset);
     }
 
     [[nodiscard]] IrPreset preset() const noexcept { return preset_; }
@@ -108,6 +115,11 @@ public:
             std::copy(work_re_.begin(), work_re_.end(), ir_r_re_.begin() + static_cast<std::ptrdiff_t>(p * kFftSize));
             std::copy(work_im_.begin(), work_im_.end(), ir_r_im_.begin() + static_cast<std::ptrdiff_t>(p * kFftSize));
         }
+
+        active_ir_l_re_ = ir_l_re_.data();
+        active_ir_l_im_ = ir_l_im_.data();
+        active_ir_r_re_ = ir_r_re_.data();
+        active_ir_r_im_ = ir_r_im_.data();
     }
 
     void process_stereo(float& left, float& right) noexcept {
@@ -181,6 +193,34 @@ private:
             const double angle = -kTwoPi * static_cast<double>(i) / static_cast<double>(kFftSize);
             twiddle_cos_[i] = static_cast<float>(std::cos(angle));
             twiddle_sin_[i] = static_cast<float>(std::sin(angle));
+        }
+    }
+
+    static constexpr std::size_t preset_index(IrPreset preset) noexcept {
+        switch (preset) {
+        case IrPreset::StudioBooth: return 1;
+        case IrPreset::BroadcastRoom: return 2;
+        case IrPreset::ConcertHall: return 3;
+        case IrPreset::Algorithmic:
+        default: return 0;
+        }
+    }
+
+    void precompute_builtin_presets() {
+        constexpr IrPreset kPresets[4] = {
+            IrPreset::Algorithmic,
+            IrPreset::StudioBooth,
+            IrPreset::BroadcastRoom,
+            IrPreset::ConcertHall,
+        };
+        for (std::size_t idx = 0; idx < 4; ++idx) {
+            load_preset(kPresets[idx]);
+            auto& tbl = preset_tables_[idx];
+            tbl.ir_l_re = ir_l_re_;
+            tbl.ir_l_im = ir_l_im_;
+            tbl.ir_r_re = ir_r_re_;
+            tbl.ir_r_im = ir_r_im_;
+            tbl.active_partitions = active_partitions_;
         }
     }
 
@@ -267,16 +307,16 @@ private:
         process_channel_partition(in_fifo_l_.data(),
                                   fdl_l_re_.data(),
                                   fdl_l_im_.data(),
-                                  ir_l_re_.data(),
-                                  ir_l_im_.data(),
+                                  active_ir_l_re_,
+                                  active_ir_l_im_,
                                   out_fifo_l_.data(),
                                   ola_tail_l_.data());
 
         process_channel_partition(in_fifo_r_.data(),
                                   fdl_r_re_.data(),
                                   fdl_r_im_.data(),
-                                  ir_r_re_.data(),
-                                  ir_r_im_.data(),
+                                  active_ir_r_re_,
+                                  active_ir_r_im_,
                                   out_fifo_r_.data(),
                                   ola_tail_r_.data());
 
@@ -382,6 +422,20 @@ private:
     std::vector<float> out_fifo_r_;
     std::vector<float> ola_tail_l_;
     std::vector<float> ola_tail_r_;
+
+    struct PresetTable {
+        std::vector<float> ir_l_re;
+        std::vector<float> ir_l_im;
+        std::vector<float> ir_r_re;
+        std::vector<float> ir_r_im;
+        std::size_t active_partitions{1};
+    };
+
+    std::array<PresetTable, 4> preset_tables_{};
+    const float* active_ir_l_re_{nullptr};
+    const float* active_ir_l_im_{nullptr};
+    const float* active_ir_r_re_{nullptr};
+    const float* active_ir_r_im_{nullptr};
 
     std::vector<float> ir_l_re_;
     std::vector<float> ir_l_im_;

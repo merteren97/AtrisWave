@@ -23,6 +23,7 @@
     <sys:String x:Key="Io_RefreshDevices">Refresh</sys:String>
     <sys:String x:Key="Io_LaunchEngine">Launch Engine</sys:String>
     <sys:String x:Key="Io_StopEngine">Stop Engine</sys:String>
+    <sys:String x:Key="Io_RestartEngine">Restart Engine</sys:String>
 
     <sys:String x:Key="Mixer_SectionTitle">Virtual Mixer Channels</sys:String>
     <sys:String x:Key="Mixer_SectionSubtitle">6-bus real-time routing &amp; 60 FPS telemetry metering</sys:String>
@@ -159,7 +160,7 @@
     <sys:String x:Key="Sb_Loop">Loop</sys:String>
 
     <sys:String x:Key="Update_Title">Software Updates (GitHub Releases)</sys:String>
-    <sys:String x:Key="Update_Desc">Current version: v2.3.0-alpha</sys:String>
+    <sys:String x:Key="Update_Desc">Current version:</sys:String>
     <sys:String x:Key="Update_CheckBtn">Check for Updates</sys:String>
     <sys:String x:Key="Update_UpToDate">You are on the latest version.</sys:String>
     <sys:String x:Key="Update_Available">New version available:</sys:String>
@@ -232,4 +233,38 @@
     <sys:String x:Key="Tray_MuteMic">Mute Microphone</sys:String>
     <sys:String x:Key="Tray_Language">Language: EN / TR</sys:String>
     <sys:String x:Key="Tray_Exit">Exit AtrisWave</sys:String>
+
+    <sys:String x:Key="Caption_Minimize">Minimize</sys:String>
+    <sys:String x:Key="Caption_Maximize">Maximize</sys:String>
+    <sys:String x:Key="Caption_Restore">Restore</sys:String>
+    <sys:String x:Key="Caption_Close">Close</sys:String>
+
+    <sys:String x:Key="Combo_SelectDevice">Select audio device...</sys:String>
+    <sys:String x:Key="Mixer_NoOutputDevices">No speakers or headphones detected. Check engine status or click Refresh.</sys:String>
+    <sys:String x:Key="Mixer_NoInputDevices">No microphones detected. Check Windows privacy/sound settings or click Refresh.</sys:String>
+
+    <sys:String x:Key="Mic_ActiveDeviceLabel">Active Mic:</sys:String>
+    <sys:String x:Key="Knob_Gate">Gate</sys:String>
+    <sys:String x:Key="Knob_Ratio">Ratio</sys:String>
+    <sys:String x:Key="Knob_Monitor">Monitor</sys:String>
+    <sys:String x:Key="Knob_Reverb">Reverb</sys:String>
+    <sys:String x:Key="Knob_Pitch">Pitch</sys:String>
+    <sys:String x:Key="Knob_Denoise">Denoise</sys:String>
+    <sys:String x:Key="Knob_Hpf">HPF</sys:String>
+    <sys:String x:Key="Knob_Mid1">Mid 1</sys:String>
+    <sys:String x:Key="Knob_Mid2">Mid 2</sys:String>
+    <sys:String x:Key="Knob_Thresh">Thresh</sys:String>
+    <sys:String x:Key="Knob_Duck">Duck</sys:String>
+    <sys:String x:Key="Knob_Limit">Limit</sys:String>
+    <sys:String x:Key="Knob_Gain">Gain</sys:String>
+
+    <sys:String x:Key="Settings_StartupTitle">Windows Startup &amp; System Tray</sys:String>
+    <sys:String x:Key="Settings_AutoStartEngine">Start Audio Engine silently on Windows startup</sys:String>
+    <sys:String x:Key="Settings_AutoStartEngineDesc">Runs AtrisWaveEngine in the background with no console window</sys:String>
+    <sys:String x:Key="Settings_AutoStartApp">Start AtrisWave Desktop App on Windows startup</sys:String>
+    <sys:String x:Key="Settings_AutoStartAppDesc">Launches the studio control UI automatically when you sign in</sys:String>
+    <sys:String x:Key="Settings_StartMinimized">Start minimized to system tray</sys:String>
+    <sys:String x:Key="Settings_StartMinimizedDesc">Keeps the main window hidden in the notification area on startup</sys:String>
+    <sys:String x:Key="Settings_KeepEngineRunning">Keep Audio Engine running when closing app</sys:String>
+    <sys:String x:Key="Settings_KeepEngineRunningDesc">Preserves live audio routing and mic DSP after exiting the UI</sys:String>
 </ResourceDictionary>

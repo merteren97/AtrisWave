@@ -125,7 +125,18 @@ public sealed class EqCurveControl : SKElement
 
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        InvalidateVisual();
+        if (e.PropertyName is null or
+            nameof(MicDspSettings.EqEnabled) or
+            nameof(MicDspSettings.EqHpfHz) or
+            nameof(MicDspSettings.EqLowDb) or
+            nameof(MicDspSettings.EqMid1Hz) or
+            nameof(MicDspSettings.EqMid1Db) or
+            nameof(MicDspSettings.EqMid2Hz) or
+            nameof(MicDspSettings.EqMid2Db) or
+            nameof(MicDspSettings.EqHighDb))
+        {
+            InvalidateVisual();
+        }
     }
 
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
@@ -190,6 +201,11 @@ public sealed class EqCurveControl : SKElement
         {
             float y = DbToY(db, pad, plotH);
             canvas.DrawLine(pad, y, pad + plotW, y, Math.Abs(db) < 0.01 ? _zeroLinePaint : _gridPaint);
+            if (Math.Abs(db) < 0.01 || Math.Abs(Math.Abs(db) - 12.0) < 0.01)
+            {
+                string lbl = db > 0 ? $"+{db:0}" : $"{db:0}";
+                canvas.DrawText(lbl, pad + (4f * _dpiScale), y - (3f * _dpiScale), SKTextAlign.Left, _labelFont, _labelPaint);
+            }
         }
     }
 
@@ -274,6 +290,21 @@ public sealed class EqCurveControl : SKElement
             SKPoint pt = GetNodePoint(settings, i, pad, plotW, plotH);
             canvas.DrawCircle(pt, radius, _draggedNode == i ? _nodeActivePaint : _nodeFillPaint);
             canvas.DrawCircle(pt, radius, _nodeStrokePaint);
+
+            if (_draggedNode == i)
+            {
+                string readout = i switch
+                {
+                    0 => $"HPF {settings.EqHpfHz:0} Hz",
+                    1 => $"120 Hz • {settings.EqLowDb:+0.0;-0.0;0.0} dB",
+                    2 => $"{settings.EqMid1Hz:0} Hz • {settings.EqMid1Db:+0.0;-0.0;0.0} dB",
+                    3 => $"{settings.EqMid2Hz:0} Hz • {settings.EqMid2Db:+0.0;-0.0;0.0} dB",
+                    _ => $"8 kHz • {settings.EqHighDb:+0.0;-0.0;0.0} dB",
+                };
+                float tx = Math.Clamp(pt.X, pad + (48f * _dpiScale), pad + plotW - (48f * _dpiScale));
+                float ty = pt.Y > pad + (24f * _dpiScale) ? pt.Y - (12f * _dpiScale) : pt.Y + (20f * _dpiScale);
+                canvas.DrawText(readout, tx, ty, SKTextAlign.Center, _labelFont, _nodeActivePaint);
+            }
         }
     }
 

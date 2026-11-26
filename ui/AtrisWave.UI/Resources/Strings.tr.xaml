@@ -23,6 +23,7 @@
     <sys:String x:Key="Io_RefreshDevices">Yenile</sys:String>
     <sys:String x:Key="Io_LaunchEngine">Motoru Başlat</sys:String>
     <sys:String x:Key="Io_StopEngine">Motoru Durdur</sys:String>
+    <sys:String x:Key="Io_RestartEngine">Motoru Yeniden Başlat</sys:String>
 
     <sys:String x:Key="Mixer_SectionTitle">Sanal Mikser Kanalları</sys:String>
     <sys:String x:Key="Mixer_SectionSubtitle">6-veri yolu gerçek zamanlı yönlendirme ve 60 FPS telemetri ölçümü</sys:String>
@@ -159,7 +160,7 @@
     <sys:String x:Key="Sb_Loop">Döngü</sys:String>
 
     <sys:String x:Key="Update_Title">Yazılım Güncellemeleri (GitHub Releases)</sys:String>
-    <sys:String x:Key="Update_Desc">Geçerli sürüm: v2.3.0-alpha</sys:String>
+    <sys:String x:Key="Update_Desc">Geçerli sürüm:</sys:String>
     <sys:String x:Key="Update_CheckBtn">Güncellemeleri Denetle</sys:String>
     <sys:String x:Key="Update_UpToDate">En güncel sürümü kullanıyorsunuz.</sys:String>
     <sys:String x:Key="Update_Available">Yeni sürüm mevcut:</sys:String>
@@ -232,4 +233,38 @@
     <sys:String x:Key="Tray_MuteMic">Mikrofonu Sustur</sys:String>
     <sys:String x:Key="Tray_Language">Dil: TR / EN</sys:String>
     <sys:String x:Key="Tray_Exit">AtrisWave'den Çık</sys:String>
+
+    <sys:String x:Key="Caption_Minimize">Küçült</sys:String>
+    <sys:String x:Key="Caption_Maximize">Ekranı Kapla</sys:String>
+    <sys:String x:Key="Caption_Restore">Önceki Boyut</sys:String>
+    <sys:String x:Key="Caption_Close">Kapat</sys:String>
+
+    <sys:String x:Key="Combo_SelectDevice">Ses aygıtı seçin...</sys:String>
+    <sys:String x:Key="Mixer_NoOutputDevices">Hoparlör veya kulaklık algılanamadı. Motor durumunu kontrol edin veya Yenile'ye tıklayın.</sys:String>
+    <sys:String x:Key="Mixer_NoInputDevices">Mikrofon algılanamadı. Windows gizlilik/ses ayarlarını kontrol edin veya Yenile'ye tıklayın.</sys:String>
+
+    <sys:String x:Key="Mic_ActiveDeviceLabel">Etkin Mikrofon:</sys:String>
+    <sys:String x:Key="Knob_Gate">Kapı</sys:String>
+    <sys:String x:Key="Knob_Ratio">Oran</sys:String>
+    <sys:String x:Key="Knob_Monitor">İzleme</sys:String>
+    <sys:String x:Key="Knob_Reverb">Yankı</sys:String>
+    <sys:String x:Key="Knob_Pitch">Perde</sys:String>
+    <sys:String x:Key="Knob_Denoise">Gürültü</sys:String>
+    <sys:String x:Key="Knob_Hpf">HPF</sys:String>
+    <sys:String x:Key="Knob_Mid1">Orta 1</sys:String>
+    <sys:String x:Key="Knob_Mid2">Orta 2</sys:String>
+    <sys:String x:Key="Knob_Thresh">Eşik</sys:String>
+    <sys:String x:Key="Knob_Duck">Kısma</sys:String>
+    <sys:String x:Key="Knob_Limit">Sınır</sys:String>
+    <sys:String x:Key="Knob_Gain">Kazanç</sys:String>
+
+    <sys:String x:Key="Settings_StartupTitle">Windows Başlangıcı ve Sistem Tepsisi</sys:String>
+    <sys:String x:Key="Settings_AutoStartEngine">Windows açılışında Ses Motorunu sessiz başlat</sys:String>
+    <sys:String x:Key="Settings_AutoStartEngineDesc">AtrisWaveEngine'i konsol penceresi olmadan arka planda çalıştırır</sys:String>
+    <sys:String x:Key="Settings_AutoStartApp">Windows açılışında AtrisWave Masaüstü Uygulamasını başlat</sys:String>
+    <sys:String x:Key="Settings_AutoStartAppDesc">Oturum açtığınızda stüdyo kontrol arayüzünü otomatik açar</sys:String>
+    <sys:String x:Key="Settings_StartMinimized">Sistem tepsisine küçültülmüş olarak başlat</sys:String>
+    <sys:String x:Key="Settings_StartMinimizedDesc">Başlangıçta ana pencereyi bildirim alanında gizli tutar</sys:String>
+    <sys:String x:Key="Settings_KeepEngineRunning">Uygulama kapatıldığında Ses Motorunu açık tut</sys:String>
+    <sys:String x:Key="Settings_KeepEngineRunningDesc">Arayüzden çıkılsa bile canlı ses yönlendirme ve mikrofon DSP'sini korur</sys:String>
 </ResourceDictionary>

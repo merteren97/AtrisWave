@@ -1,6 +1,7 @@
 #include <atriswave/audio/audio_engine.hpp>
 #include <atriswave/audio/failsafe_watchdog.hpp>
 #include <atriswave/audio/wasapi_devices.hpp>
+#include <atriswave/dsp/convolution_reverb.hpp>
 #include <atriswave/dsp/dynamic_mixer.hpp>
 #include <atriswave/dsp/soundboard.hpp>
 #include <atriswave/dsp/spectrum_analyzer.hpp>
@@ -406,6 +407,50 @@ void test_44100_to_48000_to_44100_continuous_sine() {
     ATRIS_CHECK(std::abs(measured_hz - kFreq) < 10.0, "440 Hz frequency preserved (no chipmunk pitch shift)");
 }
 
+void test_convolution_reverb_precomputed_presets_and_bus_mix() {
+    atriswave::dsp::ConvolutionReverb conv;
+    conv.prepare(48000.0);
+    conv.set_mix(0.5f, 0.5f);
+
+    static_assert(noexcept(conv.set_preset(atriswave::dsp::IrPreset::StudioBooth)),
+                  "ConvolutionReverb::set_preset must be noexcept");
+
+    const atriswave::dsp::IrPreset presets[] = {
+        atriswave::dsp::IrPreset::Algorithmic,
+        atriswave::dsp::IrPreset::StudioBooth,
+        atriswave::dsp::IrPreset::BroadcastRoom,
+        atriswave::dsp::IrPreset::ConcertHall,
+    };
+
+    for (auto p : presets) {
+        conv.set_preset(p);
+        float max_abs = 0.0f;
+        for (int i = 0; i < 1024; ++i) {
+            float l = (i == 0) ? 1.0f : 0.0f;
+            float r = (i == 0) ? 1.0f : 0.0f;
+            conv.process_stereo(l, r);
+            ATRIS_CHECK(std::isfinite(l) && std::isfinite(r), "ConvolutionReverb output finite");
+            max_abs = std::max(max_abs, std::abs(l));
+        }
+        ATRIS_CHECK(max_abs > 0.01f, "ConvolutionReverb preset produces non-zero impulse response");
+    }
+
+    auto engine_ptr = std::make_unique<atriswave::AudioEngine>();
+    HANDLE evt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    ATRIS_CHECK(engine_ptr->start(evt, true), "AudioEngine headless start for bus mix test");
+    const auto bind1 = engine_ptr->bind_output_bus("A1", "{mock-idempotent-bus}", 1.0f, false);
+    ATRIS_CHECK(bind1.ok, "Initial bind_output_bus succeeds");
+    const auto bind_idem = engine_ptr->bind_output_bus("A1", "{mock-idempotent-bus}", 0.5f, true);
+    ATRIS_CHECK(bind_idem.ok, "Idempotent bind_output_bus succeeds without deadlock");
+    const auto mix_res = engine_ptr->set_output_bus_mix("a1", 0.65f, true);
+    ATRIS_CHECK(mix_res.ok && mix_res.bus_id == "A1" && std::fabs(mix_res.volume - 0.65f) < 1e-4f && mix_res.muted,
+                "set_output_bus_mix updates A1 cleanly");
+    const auto bad_mix = engine_ptr->set_output_bus_mix("Z9", 1.0f, false);
+    ATRIS_CHECK(!bad_mix.ok && bad_mix.error == "invalid_bus_id", "Invalid bus_id rejected");
+    engine_ptr->stop();
+    CloseHandle(evt);
+}
+
 } // namespace
 
 int main() {
@@ -416,6 +461,7 @@ int main() {
     test_spectrum_analyzer();
     test_soundboard_wav_decode_and_playback();
     test_44100_to_48000_to_44100_continuous_sine();
+    test_convolution_reverb_precomputed_presets_and_bus_mix();
 
     if (g_failures == 0) {
         std::cout << "[atriswave_v2_mixer_tests] ALL TESTS PASSED\n";

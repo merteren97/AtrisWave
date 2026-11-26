@@ -15,7 +15,7 @@ public sealed record UpdateCheckResult(
     string? Error = null);
 
 /// <summary>
-/// Checks GitHub Releases (including pre-releases) for newer AtrisWave versions using SemVer comparison.
+/// Checks GitHub Releases (stable releases only) for newer AtrisWave versions using SemVer comparison.
 /// </summary>
 public static class GitHubUpdateChecker
 {
@@ -32,7 +32,7 @@ public static class GitHubUpdateChecker
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, ReleasesApiUrl);
-            req.Headers.UserAgent.ParseAdd("AtrisWave/2.3");
+            req.Headers.UserAgent.ParseAdd("AtrisWave/0.1");
             req.Headers.Accept.ParseAdd("application/vnd.github+json");
 
             using HttpResponseMessage resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
@@ -77,6 +77,11 @@ public static class GitHubUpdateChecker
         foreach (JsonElement release in root.EnumerateArray())
         {
             if (release.TryGetProperty("draft", out JsonElement draftEl) && draftEl.ValueKind == JsonValueKind.True)
+            {
+                continue;
+            }
+
+            if (release.TryGetProperty("prerelease", out JsonElement skipPreEl) && skipPreEl.ValueKind == JsonValueKind.True)
             {
                 continue;
             }

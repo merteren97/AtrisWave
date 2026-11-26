@@ -9,7 +9,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top Quick-Tune Bar: 5 Studio Voice Presets (Single Row) + Listen/A-B/Pro + Live Mic Level -->
+        <!-- Top Quick-Tune Bar: 5 Studio Voice Presets + Active Mic Badge + Listen/A-B/Pro + Live Mic Level -->
         <Border Grid.Row="0" Style="{StaticResource StudioCardStyle}" Margin="0,0,0,14">
             <StackPanel>
                 <!-- Row 1: All 5 Presets on ONE balanced row -->
@@ -21,14 +21,29 @@
                     <ui:Button Content="{DynamicResource Mic_PresetReverb}" Command="{Binding ApplyMicVoicePresetCommand}" CommandParameter="StudioReverb" HorizontalAlignment="Stretch" Appearance="Secondary" />
                 </UniformGrid>
 
-                <!-- Row 2: Listen to Myself + Compare A/B + Pro Mode -->
+                <!-- Row 2: Active Mic Badge + Listen to Myself + Compare A/B + Pro Mode -->
                 <DockPanel Margin="0,0,0,10">
                     <ui:ToggleSwitch DockPanel.Dock="Right"
                                      Content="{DynamicResource Mic_ProMode}"
                                      IsChecked="{Binding IsMicProMode, Mode=TwoWay}"
                                      VerticalAlignment="Center" />
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ToggleButton IsChecked="{Binding MicDsp.DirectMonitor, Mode=TwoWay}"
+                        <Border Margin="0,0,10,0"
+                                Padding="10,5"
+                                CornerRadius="8"
+                                Background="#1438BDF8"
+                                BorderBrush="#3338BDF8"
+                                BorderThickness="1"
+                                VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource Icon_Mic}" Width="12" Height="12" Stretch="Uniform" Stroke="#38BDF8" StrokeThickness="1.8" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{DynamicResource Mic_ActiveDeviceLabel}" FontSize="11" Foreground="#94A3B8" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding ActiveMicDisplayName}" FontSize="11" FontWeight="SemiBold" Foreground="#E2E8F0" MaxWidth="180" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <ToggleButton Style="{StaticResource StudioToggleButtonStyle}"
+                                      IsChecked="{Binding MicDsp.DirectMonitor, Mode=TwoWay}"
                                       Margin="0,0,10,0"
                                       Padding="12,6">
                             <StackPanel Orientation="Horizontal">
@@ -36,7 +51,8 @@
                                 <TextBlock Text="{DynamicResource Mic_ListenSelf}" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
-                        <ToggleButton IsChecked="{Binding MicDsp.BypassAll, Mode=TwoWay}"
+                        <ToggleButton Style="{StaticResource StudioToggleButtonStyle}"
+                                      IsChecked="{Binding MicDsp.BypassAll, Mode=TwoWay}"
                                       Padding="12,6">
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{StaticResource Icon_Compare}" Width="14" Height="14" Stretch="Uniform" Stroke="#F59E0B" StrokeThickness="1.8" Margin="0,0,7,0" VerticalAlignment="Center" />
@@ -58,8 +74,10 @@
             </StackPanel>
         </Border>
 
-        <!-- SIMPLE MODE (Default — 4 Clean, Spacious Cards) -->
-        <Grid Grid.Row="1" Visibility="{Binding IsMicProMode, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+        <!-- SIMPLE MODE (Default — 4 Clean, Spacious Cards inside ScrollViewer) -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      Visibility="{Binding IsMicProMode, Converter={StaticResource InverseBoolToVisibilityConverter}}">
             <UniformGrid Columns="2" Rows="2">
                 <!-- Card 1: Noise Cleanup -->
                 <Border Style="{StaticResource StudioCardStyle}" Margin="0,0,7,7">
@@ -72,7 +90,7 @@
                             <ui:Button Content="{DynamicResource Mic_NoiseStrong}" Command="{Binding SetDenoiseLevelCommand}" CommandParameter="Strong" Margin="4,0,0,0" HorizontalAlignment="Stretch" />
                         </UniformGrid>
                         <DockPanel>
-                            <controls:RotaryKnobControl DockPanel.Dock="Right" Value="{Binding MicDsp.GateThresholdDb, Mode=TwoWay}" Minimum="-80" Maximum="-10" DefaultValue="-45" Unit="dB" Label="Gate" AccentColor="#10B981" Height="78" />
+                            <controls:RotaryKnobControl DockPanel.Dock="Right" Value="{Binding MicDsp.GateThresholdDb, Mode=TwoWay}" Minimum="-80" Maximum="-10" DefaultValue="-45" Unit="dB" Label="{DynamicResource Knob_Gate}" AccentColor="#10B981" Height="82" />
                             <StackPanel VerticalAlignment="Center">
                                 <ui:ToggleSwitch Content="{DynamicResource Dsp_NoiseGate_Name}" IsChecked="{Binding MicDsp.GateEnabled, Mode=TwoWay}" Margin="0,0,0,4" />
                                 <TextBlock Text="{DynamicResource Dsp_NoiseGate_Desc}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" />
@@ -105,8 +123,8 @@
                         </DockPanel>
                         <UniformGrid Columns="3" Margin="0,0,0,10">
                             <controls:RotaryKnobControl Value="{Binding MicDsp.CompThresholdDb, Mode=TwoWay}" Minimum="-45" Maximum="0" DefaultValue="-20" Unit="dB" Label="{DynamicResource Drawer_CompShort}" AccentColor="#F59E0B" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.CompRatio, Mode=TwoWay}" Minimum="1" Maximum="8" DefaultValue="2.5" Label="Ratio" AccentColor="#F59E0B" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.MonitorGain, Mode=TwoWay}" Minimum="0" Maximum="1.5" DefaultValue="1.0" Label="Monitor" AccentColor="#38BDF8" Height="82" />
+                            <controls:RotaryKnobControl Value="{Binding MicDsp.CompRatio, Mode=TwoWay}" Minimum="1" Maximum="8" DefaultValue="2.5" Label="{DynamicResource Knob_Ratio}" AccentColor="#F59E0B" Height="82" />
+                            <controls:RotaryKnobControl Value="{Binding MicDsp.MonitorGain, Mode=TwoWay}" Minimum="0" Maximum="1.5" DefaultValue="1.0" Label="{DynamicResource Knob_Monitor}" AccentColor="#38BDF8" Height="82" />
                         </UniformGrid>
                         <ui:ToggleSwitch Content="{DynamicResource Dsp_Limiter_Name}" IsChecked="{Binding MicDsp.LimiterEnabled, Mode=TwoWay}" />
                     </StackPanel>
@@ -127,16 +145,16 @@
                             <ComboBoxItem Content="{DynamicResource Dsp_ReverbMode_Concert}" />
                         </ComboBox>
                         <UniformGrid Columns="3">
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.ReverbWet, Mode=TwoWay}" Minimum="0" Maximum="1" DefaultValue="0.15" Label="Reverb" AccentColor="#38BDF8" Height="78" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.PitchSemitones, Mode=TwoWay}" Minimum="-12" Maximum="12" DefaultValue="0" Unit="st" Label="Pitch" AccentColor="#A855F7" Height="78" />
+                            <controls:RotaryKnobControl Value="{Binding MicDsp.ReverbWet, Mode=TwoWay}" Minimum="0" Maximum="1" DefaultValue="0.15" Label="{DynamicResource Knob_Reverb}" AccentColor="#38BDF8" Height="82" />
+                            <controls:RotaryKnobControl Value="{Binding MicDsp.PitchSemitones, Mode=TwoWay}" Minimum="-12" Maximum="12" DefaultValue="0" Unit="st" Label="{DynamicResource Knob_Pitch}" AccentColor="#A855F7" Height="82" />
                             <ui:ToggleSwitch Content="{DynamicResource Dsp_PitchTitle}" IsChecked="{Binding MicDsp.PitchEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
                         </UniformGrid>
                     </StackPanel>
                 </Border>
             </UniformGrid>
-        </Grid>
+        </ScrollViewer>
 
-        <!-- PRO STUDIO MODE (Full 32-Band FFT EqCurveControl + All Knobs + AutoEq + Presets) -->
+        <!-- PRO STUDIO MODE (Full 32-Band FFT EqCurveControl + Module Toggles + All Knobs + AutoEq + Presets) -->
         <Grid Grid.Row="1" Visibility="{Binding IsMicProMode, Converter={StaticResource BoolToVisibilityConverter}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -163,30 +181,50 @@
             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                 <UniformGrid Columns="3">
                     <Border Style="{StaticResource StudioCardStyle}" Margin="0,0,7,0">
-                        <UniformGrid Columns="3">
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.MonitorGain, Mode=TwoWay}" Minimum="0" Maximum="1.5" DefaultValue="1.0" Label="Monitor" AccentColor="#38BDF8" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.DenoiseStrength, Mode=TwoWay}" Minimum="0" Maximum="1" DefaultValue="0.25" Label="Denoise" AccentColor="#06B6D4" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.GateThresholdDb, Mode=TwoWay}" Minimum="-80" Maximum="-10" DefaultValue="-45" Unit="dB" Label="Gate" AccentColor="#10B981" Height="82" />
-                        </UniformGrid>
+                        <StackPanel>
+                            <WrapPanel Margin="0,0,0,8">
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Knob_Denoise}" IsChecked="{Binding MicDsp.DenoiseEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,6,4" />
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Knob_Gate}" IsChecked="{Binding MicDsp.GateEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,6,4" />
+                            </WrapPanel>
+                            <UniformGrid Columns="3">
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.MonitorGain, Mode=TwoWay}" Minimum="0" Maximum="1.5" DefaultValue="1.0" Label="{DynamicResource Knob_Monitor}" AccentColor="#38BDF8" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.DenoiseStrength, Mode=TwoWay}" Minimum="0" Maximum="1" DefaultValue="0.25" Label="{DynamicResource Knob_Denoise}" AccentColor="#06B6D4" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.GateThresholdDb, Mode=TwoWay}" Minimum="-80" Maximum="-10" DefaultValue="-45" Unit="dB" Label="{DynamicResource Knob_Gate}" AccentColor="#10B981" Height="82" />
+                            </UniformGrid>
+                        </StackPanel>
                     </Border>
                     <Border Style="{StaticResource StudioCardStyle}" Margin="4,0">
-                        <UniformGrid Columns="3">
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.EqHpfHz, Mode=TwoWay}" Minimum="20" Maximum="300" DefaultValue="75" Unit="Hz" Label="HPF" AccentColor="#38BDF8" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.EqLowDb, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="{DynamicResource Drawer_EqLow}" AccentColor="#A855F7" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.EqMid1Db, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="Mid 1" AccentColor="#A855F7" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.EqMid2Db, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="Mid 2" AccentColor="#A855F7" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.EqHighDb, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="{DynamicResource Drawer_EqHigh}" AccentColor="#A855F7" Height="82" />
-                        </UniformGrid>
+                        <StackPanel>
+                            <WrapPanel Margin="0,0,0,8">
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Dsp_ParametricEq_Name}" IsChecked="{Binding MicDsp.EqEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,6,4" />
+                            </WrapPanel>
+                            <UniformGrid Columns="3">
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.EqHpfHz, Mode=TwoWay}" Minimum="20" Maximum="300" DefaultValue="75" Unit="Hz" Label="{DynamicResource Knob_Hpf}" AccentColor="#38BDF8" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.EqLowDb, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="{DynamicResource Drawer_EqLow}" AccentColor="#A855F7" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.EqMid1Db, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="{DynamicResource Knob_Mid1}" AccentColor="#A855F7" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.EqMid2Db, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="{DynamicResource Knob_Mid2}" AccentColor="#A855F7" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.EqHighDb, Mode=TwoWay}" Minimum="-15" Maximum="15" DefaultValue="0" Unit="dB" Label="{DynamicResource Drawer_EqHigh}" AccentColor="#A855F7" Height="82" />
+                            </UniformGrid>
+                        </StackPanel>
                     </Border>
                     <Border Style="{StaticResource StudioCardStyle}" Margin="7,0,0,0">
-                        <UniformGrid Columns="3">
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.CompThresholdDb, Mode=TwoWay}" Minimum="-45" Maximum="0" DefaultValue="-20" Unit="dB" Label="Thresh" AccentColor="#F59E0B" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.CompRatio, Mode=TwoWay}" Minimum="1" Maximum="12" DefaultValue="2.5" Label="Ratio" AccentColor="#F59E0B" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.DuckingDepthDb, Mode=TwoWay}" Minimum="-30" Maximum="0" DefaultValue="-12" Unit="dB" Label="Duck" AccentColor="#EC4899" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.ReverbWet, Mode=TwoWay}" Minimum="0" Maximum="1" DefaultValue="0.15" Label="Reverb" AccentColor="#38BDF8" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.PitchSemitones, Mode=TwoWay}" Minimum="-12" Maximum="12" DefaultValue="0" Unit="st" Label="Pitch" AccentColor="#A855F7" Height="82" />
-                            <controls:RotaryKnobControl Value="{Binding MicDsp.LimiterCeilingDb, Mode=TwoWay}" Minimum="-6" Maximum="0" DefaultValue="-0.5" Unit="dB" Label="Limit" AccentColor="#EF4444" Height="82" />
-                        </UniformGrid>
+                        <StackPanel>
+                            <WrapPanel Margin="0,0,0,8">
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Drawer_CompShort}" IsChecked="{Binding MicDsp.CompEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,4,4" />
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Knob_Duck}" IsChecked="{Binding MicDsp.DuckingEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,4,4" />
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Knob_Reverb}" IsChecked="{Binding MicDsp.ReverbEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,4,4" />
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Knob_Pitch}" IsChecked="{Binding MicDsp.PitchEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,4,4" />
+                                <ToggleButton Style="{StaticResource StudioToggleButtonStyle}" Content="{DynamicResource Knob_Limit}" IsChecked="{Binding MicDsp.LimiterEnabled, Mode=TwoWay}" FontSize="10" Padding="8,3" Margin="0,0,0,4" />
+                            </WrapPanel>
+                            <UniformGrid Columns="3">
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.CompThresholdDb, Mode=TwoWay}" Minimum="-45" Maximum="0" DefaultValue="-20" Unit="dB" Label="{DynamicResource Knob_Thresh}" AccentColor="#F59E0B" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.CompRatio, Mode=TwoWay}" Minimum="1" Maximum="12" DefaultValue="2.5" Label="{DynamicResource Knob_Ratio}" AccentColor="#F59E0B" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.DuckingDepthDb, Mode=TwoWay}" Minimum="-30" Maximum="0" DefaultValue="-12" Unit="dB" Label="{DynamicResource Knob_Duck}" AccentColor="#EC4899" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.ReverbWet, Mode=TwoWay}" Minimum="0" Maximum="1" DefaultValue="0.15" Label="{DynamicResource Knob_Reverb}" AccentColor="#38BDF8" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.PitchSemitones, Mode=TwoWay}" Minimum="-12" Maximum="12" DefaultValue="0" Unit="st" Label="{DynamicResource Knob_Pitch}" AccentColor="#A855F7" Height="82" />
+                                <controls:RotaryKnobControl Value="{Binding MicDsp.LimiterCeilingDb, Mode=TwoWay}" Minimum="-6" Maximum="0" DefaultValue="-0.5" Unit="dB" Label="{DynamicResource Knob_Limit}" AccentColor="#EF4444" Height="82" />
+                            </UniformGrid>
+                        </StackPanel>
                     </Border>
                 </UniformGrid>
             </ScrollViewer>

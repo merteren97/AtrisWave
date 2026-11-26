@@ -103,12 +103,30 @@ public sealed class StudioFaderControl : SKElement
         e.Handled = true;
     }
 
+    private static readonly (double lin, string lbl)[] DbTicks =
+    [
+        (1.412, "+3"),
+        (1.000, "0"),
+        (0.501, "-6"),
+        (0.251, "-12"),
+        (0.063, "-24"),
+        (0.004, "-48"),
+    ];
+
+    private const double TaperExponent = 0.42;
+
+    private static double LinearToTaper(double linear)
+        => Math.Pow(Math.Clamp(linear / 1.5, 0.0, 1.0), TaperExponent);
+
+    private static double TaperToLinear(double norm)
+        => Math.Clamp(1.5 * Math.Pow(Math.Clamp(norm, 0.0, 1.0), 1.0 / TaperExponent), 0.0, 1.5);
+
     private void UpdateValueFromY(double yWpf)
     {
         double pad = 12.0;
         double h = Math.Max(1.0, ActualHeight - (pad * 2.0));
         double norm = 1.0 - Math.Clamp((yWpf - pad) / h, 0.0, 1.0);
-        Value = Math.Clamp(norm * 1.5, 0.0, 1.5);
+        Value = TaperToLinear(norm);
     }
 
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
@@ -129,20 +147,9 @@ public sealed class StudioFaderControl : SKElement
         _tickPaint.StrokeWidth = MathF.Max(1f, dpi);
         _tickFont.Size = 8f * dpi;
 
-        // dB ticks
-        (double lin, string lbl)[] ticks =
-        [
-            (1.412, "+3"),
-            (1.000, "0"),
-            (0.501, "-6"),
-            (0.251, "-12"),
-            (0.063, "-24"),
-            (0.004, "-48"),
-        ];
-
-        foreach ((double lin, string lbl) in ticks)
+        foreach ((double lin, string lbl) in DbTicks)
         {
-            float norm = (float)Math.Clamp(lin / 1.5, 0.0, 1.0);
+            float norm = (float)LinearToTaper(lin);
             float ty = pad + ((1f - norm) * trackH);
             canvas.DrawLine(trackX - (8f * dpi), ty, trackX - (2f * dpi), ty, _tickPaint);
             canvas.DrawText(lbl, trackX - (10f * dpi), ty + (3f * dpi), SKTextAlign.Right, _tickFont, _labelPaint);
@@ -151,7 +158,7 @@ public sealed class StudioFaderControl : SKElement
         // Track background + active fill
         canvas.DrawRoundRect(trackX, pad, trackW, trackH, 3f * dpi, 3f * dpi, _trackBgPaint);
 
-        float valNorm = (float)Math.Clamp(Value / 1.5, 0.0, 1.0);
+        float valNorm = (float)LinearToTaper(Value);
         float fillH = valNorm * trackH;
         float capY = pad + ((1f - valNorm) * trackH);
 

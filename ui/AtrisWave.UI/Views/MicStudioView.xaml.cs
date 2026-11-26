@@ -35,5 +35,10 @@ public partial class MicStudioView : UserControl
     }
 
     private void OnSpectrumUpdated(object? sender, EventArgs e)
-        => EqCurve.RefreshSpectrum();
+    {
+        if (IsVisible && EqCurve.IsVisible)
+        {
+            EqCurve.RefreshSpectrum();
+        }
+    }
 }

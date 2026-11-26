@@ -11,7 +11,7 @@
                 <ColumnDefinition Width="1.0*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left Column: Language, Engine Diagnostics, Streamer Mode, Plugin Sandbox -->
+            <!-- Left Column: Language, Windows Startup & Tray, Engine Diagnostics, Plugin Sandbox -->
             <StackPanel Grid.Column="0">
                 <Border Style="{StaticResource StudioCardStyle}" Margin="0,0,0,14">
                     <StackPanel>
@@ -26,28 +26,72 @@
                         </DockPanel>
                         <DockPanel>
                             <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding IsStreamerMode, Mode=TwoWay}" />
-                            <TextBlock Text="{DynamicResource Mixer_StreamerMode}" FontSize="13" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource Mixer_StreamerMode}" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0" />
                         </DockPanel>
                     </StackPanel>
                 </Border>
 
+                <!-- Windows Startup & System Tray Card -->
+                <Border Style="{StaticResource StudioCardStyle}" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="{DynamicResource Settings_StartupTitle}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12" />
+
+                        <DockPanel Margin="0,0,0,12">
+                            <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding AutoStartEngineOnLogon, Mode=TwoWay}" VerticalAlignment="Center" />
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="{DynamicResource Settings_AutoStartEngine}" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="{DynamicResource Settings_AutoStartEngineDesc}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <DockPanel Margin="0,0,0,12">
+                            <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding AutoStartAppOnLogon, Mode=TwoWay}" VerticalAlignment="Center" />
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="{DynamicResource Settings_AutoStartApp}" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="{DynamicResource Settings_AutoStartAppDesc}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <DockPanel Margin="0,0,0,12">
+                            <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding StartMinimizedToTray, Mode=TwoWay}" VerticalAlignment="Center" />
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="{DynamicResource Settings_StartMinimized}" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="{DynamicResource Settings_StartMinimizedDesc}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <DockPanel>
+                            <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding KeepEngineRunningOnExit, Mode=TwoWay}" VerticalAlignment="Center" />
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="{DynamicResource Settings_KeepEngineRunning}" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="{DynamicResource Settings_KeepEngineRunningDesc}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Engine Daemon & Diagnostics Card -->
                 <Border Style="{StaticResource StudioCardStyle}" Margin="0,0,0,14">
                     <StackPanel>
                         <TextBlock Text="{DynamicResource Settings_EngineTitle}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10" />
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <Ellipse Width="9" Height="9" Margin="0,0,8,0" Fill="{Binding IsEngineConnected, Converter={StaticResource ConnectionStatusBrushConverter}}" />
-                            <TextBlock FontSize="13" FontWeight="SemiBold" Margin="0,0,14,0">
-                                <TextBlock.Text>
-                                    <MultiBinding Converter="{StaticResource LocKeyConverter}">
-                                        <Binding Path="StatusBadgeKey" />
-                                        <Binding Path="Revision" Source="{x:Static services:LocalizationService.Instance}" />
-                                    </MultiBinding>
-                                </TextBlock.Text>
-                            </TextBlock>
-                            <TextBlock Text="{Binding SampleRateDisplay}" FontSize="12" Foreground="#94A3B8" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding EngineStatusBadgeText}" FontSize="13" FontWeight="SemiBold" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding EngineDiagnosticsText}" FontSize="12" Foreground="#94A3B8" VerticalAlignment="Center" />
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <ui:Button Command="{Binding LaunchOrStopEngineCommand}" Margin="0,0,8,0" Appearance="Secondary">
+
+                        <Border Margin="0,0,0,10"
+                                Padding="10,7"
+                                CornerRadius="8"
+                                Background="#24EF4444"
+                                BorderBrush="#55EF4444"
+                                BorderThickness="1"
+                                Visibility="{Binding HasLastError, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="{Binding LastErrorMessage}" FontSize="11.5" Foreground="#FCA5A5" TextWrapping="Wrap" />
+                        </Border>
+
+                        <WrapPanel Orientation="Horizontal">
+                            <ui:Button Command="{Binding LaunchOrStopEngineCommand}" Margin="0,0,8,4" Appearance="Secondary">
                                 <ui:Button.Content>
                                     <MultiBinding Converter="{StaticResource LocKeyConverter}">
                                         <Binding Path="EngineActionKey" />
@@ -55,9 +99,10 @@
                                     </MultiBinding>
                                 </ui:Button.Content>
                             </ui:Button>
-                            <ui:Button Content="{DynamicResource Status_PingEngine}" Command="{Binding PingEngineCommand}" Margin="0,0,10,0" Appearance="Secondary" />
-                            <TextBlock Text="{Binding LastPingMessage}" FontSize="12" Foreground="#38BDF8" VerticalAlignment="Center" />
-                        </StackPanel>
+                            <ui:Button Content="{DynamicResource Io_RestartEngine}" Command="{Binding RestartEngineCommand}" Margin="0,0,8,4" Appearance="Secondary" />
+                            <ui:Button Content="{DynamicResource Status_PingEngine}" Command="{Binding PingEngineCommand}" Margin="0,0,10,4" Appearance="Secondary" />
+                            <TextBlock Text="{Binding LastPingMessage}" FontSize="12" Foreground="#38BDF8" VerticalAlignment="Center" Margin="0,0,0,4" />
+                        </WrapPanel>
                     </StackPanel>
                 </Border>
 
@@ -74,7 +119,7 @@
                             <ui:Button DockPanel.Dock="Right" Content="{DynamicResource Pro_ScanPlugins}" Command="{Binding ScanPluginsCommand}" Appearance="Primary" Padding="14,7" />
                             <StackPanel>
                                 <TextBlock Text="{DynamicResource Pro_SandboxTitle}" FontSize="15" FontWeight="SemiBold" />
-                                <TextBlock Text="{DynamicResource Pro_SandboxDesc}" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0" />
+                                <TextBlock Text="{DynamicResource Pro_SandboxDesc}" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0" TextWrapping="Wrap" />
                             </StackPanel>
                         </DockPanel>
 
@@ -97,6 +142,17 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+
+                        <TextBlock Grid.Row="2"
+                                   Text="{DynamicResource Pro_NoPlugins}"
+                                   Foreground="#94A3B8"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Margin="20"
+                                   Visibility="{Binding HasNoPlugins, Converter={StaticResource BoolToVisibilityConverter}}" />
                     </Grid>
                 </Border>
             </StackPanel>
@@ -139,7 +195,10 @@
                 <Border Style="{StaticResource StudioCardStyle}">
                     <StackPanel>
                         <TextBlock Text="{DynamicResource Update_Title}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4" />
-                        <TextBlock Text="{DynamicResource Update_Desc}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,10" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="{DynamicResource Update_Desc}" FontSize="11" Foreground="#94A3B8" Margin="0,0,4,0" />
+                            <TextBlock Text="{Binding CurrentAppVersion, StringFormat=v{0}}" FontSize="11" FontWeight="SemiBold" Foreground="#CBD5E1" />
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <ui:Button Content="{DynamicResource Update_CheckBtn}" Command="{Binding CheckForUpdatesCommand}" Appearance="Secondary" Margin="0,0,8,0" />
                             <ui:Button Command="{Binding DownloadAndInstallUpdateCommand}"

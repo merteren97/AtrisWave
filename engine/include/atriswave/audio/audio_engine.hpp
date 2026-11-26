@@ -84,6 +84,9 @@ public:
                                                   const std::string& device_id,
                                                   float volume,
                                                   bool muted) override;
+    [[nodiscard]] OutputBusMixResult set_output_bus_mix(const std::string& bus_id,
+                                                        float volume,
+                                                        bool muted) override;
     [[nodiscard]] V2CommandResult set_channel_send(uint32_t channel_id,
                                                    const std::string& bus_id,
                                                    bool enabled,
@@ -118,9 +121,8 @@ private:
         std::string pair_group;
         SpscRingBuffer<StereoFrame, 4096> input_ring;
         dsp::AdaptivePllResampler pll_l;
-        dsp::AdaptivePllResampler pll_r;
-        std::array<float, 16> leftover_l{};
-        std::array<float, 16> leftover_r{};
+        std::array<float, 64> leftover_l{};
+        std::array<float, 64> leftover_r{};
         size_t leftover_count{0};
         std::atomic<bool> primed{false};
         std::atomic<bool> send_a1_rt{false};
@@ -137,9 +139,8 @@ private:
         std::string pair_group;
         SpscRingBuffer<StereoFrame, 4096> output_ring;
         dsp::AdaptivePllResampler pll_l;
-        dsp::AdaptivePllResampler pll_r;
-        std::array<float, 16> leftover_l{};
-        std::array<float, 16> leftover_r{};
+        std::array<float, 64> leftover_l{};
+        std::array<float, 64> leftover_r{};
         size_t leftover_count{0};
         std::atomic<uint32_t> render_sr{48000};
         float last_out_l{0.0f};
@@ -151,6 +152,12 @@ private:
     void init_default_slots();
     void master_clock_loop();
     void process_master_tick(size_t frames) noexcept;
+    void wait_for_master_tick_quiesce() noexcept;
+    void check_invalidated_streams();
+    void auto_setup_missing_defaults(bool fill_a1, bool fill_mic, bool fill_b1);
+    void mark_state_dirty() noexcept;
+    void save_persistent_state() const;
+    bool load_persistent_state();
 
     [[nodiscard]] bool would_create_feedback_loop_locked(
         uint32_t ch_idx,
@@ -201,10 +208,11 @@ private:
     std::array<std::vector<float>, dsp::kDynamicMaxBuses> bus_out_r_;
 
     mutable std::mutex state_mutex_;
+    std::mutex stream_config_mutex_;
     std::array<ChannelRuntime, dsp::kDynamicMaxChannels> channels_{};
     std::array<OutputBusRuntime, dsp::kDynamicMaxBuses> buses_{};
 
-    std::mutex config_mutex_;
+    mutable std::mutex config_mutex_;
     MicDspConfig current_mic_cfg_{};
     audio::RoutingRulesStore routing_rules_;
     audio::FailsafeWatchdog failsafe_;
@@ -213,6 +221,13 @@ private:
     std::atomic<uint32_t> sample_rate_{48000};
     std::atomic<uint32_t> buffer_frames_{480};
     std::atomic<uint32_t> xrun_count_{0};
+    std::atomic<float> cpu_load_percent_{0.0f};
+    std::atomic<uint64_t> master_tick_epoch_{0};
+    std::atomic<bool> state_dirty_{false};
+    std::atomic<bool> loading_state_{false};
+    bool headless_mode_{false};
+    uint64_t last_recovery_check_ms_{0};
+    uint64_t last_state_save_ms_{0};
 };
 
 } // namespace atriswave

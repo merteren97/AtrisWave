@@ -21,7 +21,7 @@ struct AudioDeviceInfo {
 class WasapiDeviceEnumerator final {
 public:
     /// Enumerates all active WASAPI capture and render endpoints.
-    [[nodiscard]] static std::vector<AudioDeviceInfo> enumerate_devices();
+    [[nodiscard]] static std::vector<AudioDeviceInfo> enumerate_devices(bool query_mix_format = true);
 
     /// Returns true if the friendly name matches known virtual audio drivers
     /// (VB-Cable, Virtual Audio, AtrisWave, VoiceMeeter).

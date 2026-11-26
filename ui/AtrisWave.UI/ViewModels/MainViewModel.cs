@@ -24,18 +24,35 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly SharedMemoryTelemetryReader _telemetryReader = new();
     private readonly EnginePipeClient _pipeClient = new();
     private readonly EngineProcessManager _processManager = new();
+    private readonly AppSettingsService _settingsService = new();
+    private readonly StartupRegistrationService _startupService = new();
+    private readonly AppSettings _appSettings;
     private readonly LocalAutomationServer _rpcServer;
     private readonly ChannelMeterFrame[] _channelBuffer = new ChannelMeterFrame[TelemetryConstants.MaxChannels];
     private readonly ChannelMeterFrame[] _busBuffer = new ChannelMeterFrame[TelemetryConstants.MaxBuses];
     public float[] SpectrumDb { get; } = new float[TelemetryConstants.SpectrumBins];
+
     private readonly DispatcherTimer _telemetryTimer;
     private readonly DispatcherTimer _micDspDebounceTimer;
+    private readonly DispatcherTimer _mixDebounceTimer;
+    private readonly HashSet<uint> _pendingChannelMixIds = [];
+    private readonly HashSet<uint> _pendingChannelFullDspIds = [];
+    private readonly HashSet<string> _pendingBusMixIds = new(StringComparer.OrdinalIgnoreCase);
+
+    private DynamicChannelModel? _cachedPrimaryMic;
     private bool _disposed;
     private bool _suppressSync;
+    private bool _suppressSettingsSave;
     private bool _isSyncingFromEngine;
+    private int _startupInitialized;
     private DateTime _lastAutoSyncUtc = DateTime.MinValue;
-    private int _autoSyncAttempts;
+    private double _autoSyncBackoffSeconds = 2.0;
     private string _updateLatestVersion = string.Empty;
+
+    private EngineState _lastStatusEngineState = (EngineState)uint.MaxValue;
+    private uint _lastStatusSampleRate;
+    private uint _lastStatusBufferFrames;
+    private bool _lastStatusConnected;
 
     public string CurrentAppVersion { get; } = ResolveAppVersion();
 
@@ -86,13 +103,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _driverStatusKey = "Driver_StatusBridge";
     [ObservableProperty] private bool _isEngineConnected;
     [ObservableProperty] private bool _isEngineProcessRunning;
+    [ObservableProperty] private bool _isEngineRunning;
     [ObservableProperty] private EngineState _engineState = EngineState.Stopped;
     [ObservableProperty] private uint _sampleRate = 48000;
     [ObservableProperty] private uint _bufferFrames = 256;
     [ObservableProperty] private float _cpuLoadPercent;
     [ObservableProperty] private string _statusBadgeKey = "Status_Standby";
+    [ObservableProperty] private string _engineStatusBadgeText = string.Empty;
     [ObservableProperty] private string _sampleRateDisplay = string.Empty;
+    [ObservableProperty] private string _engineDiagnosticsText = string.Empty;
     [ObservableProperty] private string _lastPingMessage = string.Empty;
+    [ObservableProperty] private string _lastErrorMessage = string.Empty;
+    [ObservableProperty] private bool _hasLastError;
     [ObservableProperty] private string _engineActionKey = "Io_LaunchEngine";
     [ObservableProperty] private float _micGainReductionNormalized;
     [ObservableProperty] private bool _globalHotkeysEnabled = true;
@@ -101,6 +123,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _isHealthWarning = true;
     [ObservableProperty] private string _healthMessageKey = "Health_MissingA1";
+    [ObservableProperty] private string _healthWarningMessage = string.Empty;
+
+    [ObservableProperty] private bool _hasNoOutputDevices = true;
+    [ObservableProperty] private bool _hasNoInputDevices = true;
+    [ObservableProperty] private bool _hasNoAudioSessions = true;
+    [ObservableProperty] private bool _hasNoPlugins = true;
+    [ObservableProperty] private string _activeMicDisplayName = string.Empty;
+
+    [ObservableProperty] private bool _autoStartEngineOnLogon;
+    [ObservableProperty] private bool _autoStartAppOnLogon;
+    [ObservableProperty] private bool _startMinimizedToTray;
+    [ObservableProperty] private bool _keepEngineRunningOnExit = true;
 
     [ObservableProperty] private bool _isStreamerMode;
     [ObservableProperty] private bool _isMicProMode;
@@ -112,35 +146,55 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _newChannelSourceIndex;
 
     public OutputBusModel? PrimaryOutputBus => OutputBuses.Count > 0 ? OutputBuses[0] : null;
-    public DynamicChannelModel? PrimaryMicChannel => DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
+    public DynamicChannelModel? PrimaryMicChannel => _cachedPrimaryMic ??= DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
 
     public event EventHandler<bool>? GlobalHotkeysEnabledChanged;
 
     public MainViewModel()
     {
         _rpcServer = new LocalAutomationServer(HandleRpcAsync, port: 18923);
+        _appSettings = _settingsService.Load();
 
-        LocalizationService.Instance.PropertyChanged += (_, e) =>
+        _suppressSettingsSave = true;
+        try
         {
-            if (e.PropertyName == nameof(LocalizationService.Revision))
+            if (!string.IsNullOrWhiteSpace(_appSettings.Language) &&
+                !string.Equals(_appSettings.Language, LocalizationService.Instance.CurrentLanguage, StringComparison.OrdinalIgnoreCase))
             {
-                RefreshLocalizedStatusStrings();
+                LocalizationService.Instance.SetLanguage(_appSettings.Language);
             }
-        };
+
+            IsStreamerMode = _appSettings.IsStreamerMode;
+            GlobalHotkeysEnabled = _appSettings.GlobalHotkeysEnabled;
+            StartMinimizedToTray = _appSettings.StartMinimizedToTray;
+            KeepEngineRunningOnExit = _appSettings.KeepEngineRunningOnExit;
+            AutoStartEngineOnLogon = _startupService.IsEngineAutoStartEnabled();
+            AutoStartAppOnLogon = _startupService.IsAppAutoStartEnabled();
+            if (_appSettings.RpcServerEnabled)
+            {
+                RpcServerEnabled = true;
+            }
+        }
+        finally
+        {
+            _suppressSettingsSave = false;
+        }
+
+        LocalizationService.Instance.PropertyChanged += OnLocalizationPropertyChanged;
 
         AttachChannelHandlers();
         AttachBusHandlers();
         MicDsp.PropertyChanged += OnMicDspPropertyChanged;
 
         _micDspDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
-        _micDspDebounceTimer.Tick += async (_, _) =>
-        {
-            _micDspDebounceTimer.Stop();
-            await _pipeClient.SetMicDspAsync(MicDsp);
-        };
+        _micDspDebounceTimer.Tick += OnMicDspDebounceTick;
+
+        _mixDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(35) };
+        _mixDebounceTimer.Tick += OnMixDebounceTick;
 
         RefreshLocalizedStatusStrings();
         UpdateHealthCheck();
+        UpdateDeviceEmptyStates();
 
         _telemetryTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
@@ -150,6 +204,90 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _telemetryTimer.Start();
     }
 
+    private void OnLocalizationPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(LocalizationService.Revision))
+        {
+            if (!_suppressSettingsSave)
+            {
+                _appSettings.Language = LocalizationService.Instance.CurrentLanguage;
+                _settingsService.Save(_appSettings);
+            }
+
+            RefreshLocalizedStatusStrings(force: true);
+            UpdateHealthCheck();
+            UpdateActiveMicDisplayName();
+        }
+    }
+
+    private async void OnMicDspDebounceTick(object? sender, EventArgs e)
+    {
+        _micDspDebounceTimer.Stop();
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            await _pipeClient.SetMicDspAsync(MicDsp);
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
+    }
+
+    private async void OnMixDebounceTick(object? sender, EventArgs e)
+    {
+        _mixDebounceTimer.Stop();
+        if (_disposed)
+        {
+            return;
+        }
+
+        uint[] mixIds = [.. _pendingChannelMixIds];
+        uint[] fullDspIds = [.. _pendingChannelFullDspIds];
+        string[] busIds = [.. _pendingBusMixIds];
+        _pendingChannelMixIds.Clear();
+        _pendingChannelFullDspIds.Clear();
+        _pendingBusMixIds.Clear();
+
+        try
+        {
+            foreach (uint cid in mixIds)
+            {
+                DynamicChannelModel? ch = DynamicChannels.FirstOrDefault(c => c.ChannelId == cid);
+                if (ch is not null)
+                {
+                    await _pipeClient.SetChannelDspAsync(ch.ChannelId, ch.Volume, ch.Muted, ch.Solo, ch.Pan);
+                }
+            }
+
+            foreach (uint cid in fullDspIds)
+            {
+                DynamicChannelModel? ch = DynamicChannels.FirstOrDefault(c => c.ChannelId == cid);
+                if (ch is not null)
+                {
+                    await _pipeClient.SetChannelFullDspAsync(ch);
+                }
+            }
+
+            foreach (string busId in busIds)
+            {
+                OutputBusModel? bus = OutputBuses.FirstOrDefault(b => string.Equals(b.BusId, busId, StringComparison.OrdinalIgnoreCase));
+                if (bus is not null)
+                {
+                    await _pipeClient.SetOutputBusMixAsync(bus.BusId, bus.Volume, bus.Muted);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
+    }
+
     private void AttachChannelHandlers()
     {
         foreach (DynamicChannelModel ch in DynamicChannels)
@@ -157,6 +295,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ch.PropertyChanged -= OnDynamicChannelPropertyChanged;
             ch.PropertyChanged += OnDynamicChannelPropertyChanged;
         }
+        _cachedPrimaryMic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
     }
 
     private void AttachBusHandlers()
@@ -168,7 +307,118 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    partial void OnGlobalHotkeysEnabledChanged(bool value) => GlobalHotkeysEnabledChanged?.Invoke(this, value);
+    partial void OnGlobalHotkeysEnabledChanged(bool value)
+    {
+        GlobalHotkeysEnabledChanged?.Invoke(this, value);
+        if (!_suppressSettingsSave)
+        {
+            _appSettings.GlobalHotkeysEnabled = value;
+            _settingsService.Save(_appSettings);
+        }
+    }
+
+    partial void OnIsStreamerModeChanged(bool value)
+    {
+        if (!_suppressSettingsSave)
+        {
+            _appSettings.IsStreamerMode = value;
+            _settingsService.Save(_appSettings);
+        }
+    }
+
+    partial void OnAutoStartEngineOnLogonChanged(bool value)
+    {
+        if (_suppressSettingsSave)
+        {
+            return;
+        }
+
+        try
+        {
+            string? engineExe = _processManager.FindEngineExecutable();
+            _startupService.SetEngineAutoStart(value, engineExe);
+            _appSettings.AutoStartEngineOnLogon = value;
+            _settingsService.Save(_appSettings);
+            ClearError();
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+            _suppressSettingsSave = true;
+            try
+            {
+                AutoStartEngineOnLogon = !value;
+            }
+            finally
+            {
+                _suppressSettingsSave = false;
+            }
+        }
+    }
+
+    partial void OnAutoStartAppOnLogonChanged(bool value)
+    {
+        if (_suppressSettingsSave)
+        {
+            return;
+        }
+
+        try
+        {
+            string? uiExe = Environment.ProcessPath;
+            _startupService.SetAppAutoStart(value, uiExe, StartMinimizedToTray);
+            _appSettings.AutoStartAppOnLogon = value;
+            _settingsService.Save(_appSettings);
+            ClearError();
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+            _suppressSettingsSave = true;
+            try
+            {
+                AutoStartAppOnLogon = !value;
+            }
+            finally
+            {
+                _suppressSettingsSave = false;
+            }
+        }
+    }
+
+    partial void OnStartMinimizedToTrayChanged(bool value)
+    {
+        if (_suppressSettingsSave)
+        {
+            return;
+        }
+
+        try
+        {
+            _appSettings.StartMinimizedToTray = value;
+            _settingsService.Save(_appSettings);
+            if (AutoStartAppOnLogon)
+            {
+                _startupService.SetAppAutoStart(true, Environment.ProcessPath, value);
+            }
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
+    }
+
+    partial void OnKeepEngineRunningOnExitChanged(bool value)
+    {
+        if (!_suppressSettingsSave)
+        {
+            _appSettings.KeepEngineRunningOnExit = value;
+            _settingsService.Save(_appSettings);
+        }
+    }
+
+    partial void OnLastErrorMessageChanged(string value)
+        => HasLastError = !string.IsNullOrWhiteSpace(value);
 
     partial void OnRpcServerEnabledChanged(bool value)
     {
@@ -181,6 +431,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             _ = _rpcServer.StopAsync();
             RpcStatusKey = "Pro_RpcStopped";
+        }
+
+        if (!_suppressSettingsSave)
+        {
+            _appSettings.RpcServerEnabled = value;
+            _settingsService.Save(_appSettings);
         }
     }
 
@@ -198,28 +454,31 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 {
                     IsMicMuted = ch.Muted;
                 }
-                _ = _pipeClient.SetChannelDspAsync(ch.ChannelId, ch.Volume, ch.Muted, ch.Solo, ch.Pan);
+                _pendingChannelMixIds.Add(ch.ChannelId);
+                RestartMixDebounce();
                 break;
             case nameof(DynamicChannelModel.Volume):
             case nameof(DynamicChannelModel.Solo):
             case nameof(DynamicChannelModel.Pan):
-                _ = _pipeClient.SetChannelDspAsync(ch.ChannelId, ch.Volume, ch.Muted, ch.Solo, ch.Pan);
+                _pendingChannelMixIds.Add(ch.ChannelId);
+                RestartMixDebounce();
                 break;
             case nameof(DynamicChannelModel.SendA1):
-                _ = _pipeClient.SetChannelSendAsync(ch.ChannelId, "A1", ch.SendA1);
+                _ = SafeFireAsync(() => _pipeClient.SetChannelSendAsync(ch.ChannelId, "A1", ch.SendA1));
                 break;
             case nameof(DynamicChannelModel.SendA2):
-                _ = _pipeClient.SetChannelSendAsync(ch.ChannelId, "A2", ch.SendA2);
+                _ = SafeFireAsync(() => _pipeClient.SetChannelSendAsync(ch.ChannelId, "A2", ch.SendA2));
                 break;
             case nameof(DynamicChannelModel.SendB1):
-                _ = _pipeClient.SetChannelSendAsync(ch.ChannelId, "B1", ch.SendB1);
+                _ = SafeFireAsync(() => _pipeClient.SetChannelSendAsync(ch.ChannelId, "B1", ch.SendB1));
                 break;
             case nameof(DynamicChannelModel.SendB2):
-                _ = _pipeClient.SetChannelSendAsync(ch.ChannelId, "B2", ch.SendB2);
+                _ = SafeFireAsync(() => _pipeClient.SetChannelSendAsync(ch.ChannelId, "B2", ch.SendB2));
                 break;
             case nameof(DynamicChannelModel.DeviceId):
-                _ = _pipeClient.BindChannelSourceAsync(ch.ChannelId, ch.SourceType, ch.DeviceId);
+                _ = SafeFireAsync(() => _pipeClient.BindChannelSourceAsync(ch.ChannelId, ch.SourceType, ch.DeviceId));
                 UpdateHealthCheck();
+                UpdateActiveMicDisplayName();
                 break;
             case nameof(DynamicChannelModel.EqLowDb):
             case nameof(DynamicChannelModel.EqMidDb):
@@ -228,7 +487,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             case nameof(DynamicChannelModel.CompThresholdDb):
             case nameof(DynamicChannelModel.DuckSourceId):
             case nameof(DynamicChannelModel.DuckDepthDb):
-                _ = _pipeClient.SetChannelFullDspAsync(ch);
+                _pendingChannelFullDspIds.Add(ch.ChannelId);
+                RestartMixDebounce();
                 break;
         }
     }
@@ -240,10 +500,37 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (e.PropertyName is nameof(OutputBusModel.DeviceId) or nameof(OutputBusModel.Volume) or nameof(OutputBusModel.Muted))
+        if (e.PropertyName is nameof(OutputBusModel.DeviceId))
         {
-            _ = _pipeClient.BindOutputBusAsync(bus.BusId, bus.DeviceId, bus.Volume, bus.Muted);
+            _ = SafeFireAsync(() => _pipeClient.BindOutputBusAsync(bus.BusId, bus.DeviceId, bus.Volume, bus.Muted));
             UpdateHealthCheck();
+        }
+        else if (e.PropertyName is nameof(OutputBusModel.Volume) or nameof(OutputBusModel.Muted))
+        {
+            _pendingBusMixIds.Add(bus.BusId);
+            RestartMixDebounce();
+        }
+    }
+
+    private void RestartMixDebounce()
+    {
+        _mixDebounceTimer.Stop();
+        _mixDebounceTimer.Start();
+    }
+
+    private async Task SafeFireAsync(Func<Task<EnginePipeResponse>> action)
+    {
+        try
+        {
+            EnginePipeResponse resp = await action();
+            if (!resp.Ok && !string.IsNullOrWhiteSpace(resp.Error))
+            {
+                SetError(resp.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
         }
     }
 
@@ -273,9 +560,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnTelemetryTick(object? sender, EventArgs e)
     {
-        IsEngineProcessRunning = _processManager.IsRunning;
-        EngineActionKey = IsEngineProcessRunning ? "Io_StopEngine" : "Io_LaunchEngine";
-
         if (_telemetryReader.TryRead(out TelemetryHeader header, _channelBuffer, _busBuffer, SpectrumDb))
         {
             SpectrumUpdated?.Invoke(this, EventArgs.Empty);
@@ -284,14 +568,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 : EngineState.Stopped;
 
             bool wasConnected = IsEngineConnected;
-            IsEngineConnected = state != EngineState.Stopped;
+            bool nowConnected = state != EngineState.Stopped;
+            IsEngineConnected = nowConnected;
+            if (wasConnected != nowConnected)
+            {
+                SetEngineProcessState(nowConnected);
+            }
+
             EngineState = state;
             SampleRate = header.SampleRate > 0 ? header.SampleRate : 48000;
             BufferFrames = header.BufferFrames;
             CpuLoadPercent = header.CpuLoadPercent;
 
-            if (IsEngineConnected &&
-                (!wasConnected || (OutputDevices.Count == 0 && _autoSyncAttempts < 3 && (DateTime.UtcNow - _lastAutoSyncUtc).TotalSeconds >= 5.0)) &&
+            if (nowConnected &&
+                (!wasConnected ||
+                 ((OutputDevices.Count == 0 || InputDevices.Count == 0) &&
+                  (DateTime.UtcNow - _lastAutoSyncUtc).TotalSeconds >= _autoSyncBackoffSeconds)) &&
                 !_isSyncingFromEngine)
             {
                 _ = SyncAllFromEngineAsync();
@@ -326,7 +618,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 bus.IsClipping = frame.IsClipping;
             }
 
-            DynamicChannelModel? mic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
+            DynamicChannelModel? mic = _cachedPrimaryMic;
             MicGainReductionNormalized = mic is not null
                 ? Math.Clamp(MathF.Abs(mic.GainReductionDb) / 24.0f, 0.0f, 1.0f)
                 : 0f;
@@ -337,10 +629,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         else if (IsEngineConnected)
         {
             IsEngineConnected = false;
-            _autoSyncAttempts = 0;
+            SetEngineProcessState(false);
+            _autoSyncBackoffSeconds = 2.0;
             EngineState = EngineState.Stopped;
             CpuLoadPercent = 0f;
             MicGainReductionNormalized = 0f;
+            MicLiveLevelNormalized = 0f;
 
             foreach (DynamicChannelModel ch in DynamicChannels)
             {
@@ -366,6 +660,45 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RefreshLocalizedStatusStrings();
     }
 
+    private void SetEngineProcessState(bool running)
+    {
+        IsEngineProcessRunning = running;
+        IsEngineRunning = running;
+        EngineActionKey = running ? "Io_StopEngine" : "Io_LaunchEngine";
+    }
+
+    private void SetError(string? message)
+        => LastErrorMessage = message ?? string.Empty;
+
+    private void ClearError()
+        => LastErrorMessage = string.Empty;
+
+    private void UpdateDeviceEmptyStates()
+    {
+        HasNoOutputDevices = OutputDevices.Count == 0;
+        HasNoInputDevices = InputDevices.Count == 0;
+        HasNoAudioSessions = AudioSessions.Count == 0;
+        HasNoPlugins = DiscoveredPlugins.Count == 0;
+        UpdateActiveMicDisplayName();
+    }
+
+    private void UpdateActiveMicDisplayName()
+    {
+        string? devId = PrimaryMicChannel?.DeviceId;
+        if (!string.IsNullOrWhiteSpace(devId))
+        {
+            AudioDeviceInfo? match = InputDevices.FirstOrDefault(d => string.Equals(d.Id, devId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                ActiveMicDisplayName = match.Name;
+                return;
+            }
+        }
+
+        ActiveMicDisplayName = InputDevices.FirstOrDefault(d => d.IsDefault)?.Name
+                               ?? LocalizationService.Instance.GetString("Status_Standby");
+    }
+
     private void UpdateHealthCheck()
     {
         bool a1Ready = OutputBuses.Count > 0 && !string.IsNullOrWhiteSpace(OutputBuses[0].DeviceId);
@@ -373,10 +706,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         bool ready = a1Ready && micReady;
         IsHealthWarning = !ready;
         HealthMessageKey = ready ? "Health_AllReady" : "Health_MissingA1";
+        HealthWarningMessage = LocalizationService.Instance.GetString(HealthMessageKey);
     }
 
-    private void RefreshLocalizedStatusStrings()
+    private void RefreshLocalizedStatusStrings(bool force = false)
     {
+        if (!force &&
+            _lastStatusEngineState == EngineState &&
+            _lastStatusSampleRate == SampleRate &&
+            _lastStatusBufferFrames == BufferFrames &&
+            _lastStatusConnected == IsEngineConnected)
+        {
+            return;
+        }
+
+        _lastStatusEngineState = EngineState;
+        _lastStatusSampleRate = SampleRate;
+        _lastStatusBufferFrames = BufferFrames;
+        _lastStatusConnected = IsEngineConnected;
+
         LocalizationService loc = LocalizationService.Instance;
 
         StatusBadgeKey = EngineState switch
@@ -385,10 +733,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             EngineState.Degraded => "Status_Degraded",
             _ => "Status_Standby",
         };
+        EngineStatusBadgeText = loc.GetString(StatusBadgeKey);
 
         SampleRateDisplay = IsEngineConnected
             ? string.Format(loc.GetString("Status_SampleRateFormat"), SampleRate, BufferFrames)
             : loc.GetString("Status_SampleRateOffline");
+        EngineDiagnosticsText = SampleRateDisplay;
     }
 
     [RelayCommand]
@@ -397,7 +747,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ToggleMicMute()
     {
-        DynamicChannelModel? mic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
+        DynamicChannelModel? mic = PrimaryMicChannel;
         if (mic is not null)
         {
             mic.Muted = !mic.Muted;
@@ -412,7 +762,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task CreateNewChannelAsync()
     {
-        string name = string.IsNullOrWhiteSpace(NewChannelName) ? "Custom" : NewChannelName.Trim();
+        string name = string.IsNullOrWhiteSpace(NewChannelName)
+            ? LocalizationService.Instance.GetString("Ch_DefaultName")
+            : NewChannelName.Trim();
+        if (name == "Ch_DefaultName")
+        {
+            name = "Custom";
+        }
+
         string sourceType = NewChannelSourceIndex switch
         {
             1 => "hardware_input",
@@ -467,6 +824,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         await _pipeClient.DeleteChannelAsync(channel.ChannelId);
         DynamicChannels.Remove(channel);
+        _cachedPrimaryMic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
     }
 
     [RelayCommand]
@@ -485,6 +843,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         EnginePipeResponse resp = await _pipeClient.AutoSetupDefaultsAsync();
         if (resp.Ok)
         {
+            ClearError();
             await RefreshV2MixerStateAsync();
         }
         else
@@ -496,17 +855,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 OutputBuses[0].DeviceId = defOut.Id;
             }
-            DynamicChannelModel? mic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
+            DynamicChannelModel? mic = PrimaryMicChannel;
             if (defMic is not null && mic is not null)
             {
                 mic.DeviceId = defMic.Id;
             }
             UpdateHealthCheck();
+            UpdateActiveMicDisplayName();
         }
     }
 
     [RelayCommand]
-    private void ImportAutoEq()
+    private async Task ImportAutoEqAsync()
     {
         var dialog = new OpenFileDialog
         {
@@ -515,111 +875,190 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (dialog.ShowDialog() == true && File.Exists(dialog.FileName))
         {
-            string content = File.ReadAllText(dialog.FileName);
+            string content = await File.ReadAllTextAsync(dialog.FileName);
             AutoEqProfile profile = AutoEqParser.Parse(content);
             AutoEqParser.ApplyTo(profile, MicDsp);
         }
     }
 
     [RelayCommand]
-    private void ScanPlugins()
+    private async Task ScanPluginsAsync()
     {
+        IReadOnlyList<DiscoveredPlugin> plugins = await Task.Run(PluginScanner.ScanStandardDirectories);
         DiscoveredPlugins.Clear();
-        foreach (DiscoveredPlugin plugin in PluginScanner.ScanStandardDirectories())
+        foreach (DiscoveredPlugin plugin in plugins)
         {
             DiscoveredPlugins.Add(plugin);
         }
+        HasNoPlugins = DiscoveredPlugins.Count == 0;
     }
 
     [RelayCommand]
     private async Task PingEngineAsync()
     {
-        EnginePipeResponse response = await _pipeClient.PingAsync();
-        LastPingMessage = response.Ok ? "OK" : (response.Error ?? "Offline");
+        EnginePipeResponse response = await _pipeClient.PingAsync(500);
+        if (response.Ok)
+        {
+            ClearError();
+            LastPingMessage = LocalizationService.Instance.GetString("Status_Connected");
+        }
+        else
+        {
+            SetError(response.Error ?? "Offline");
+            LastPingMessage = response.Error ?? LocalizationService.Instance.GetString("Status_Standby");
+        }
     }
 
     [RelayCommand]
     private async Task LaunchOrStopEngineAsync()
     {
-        if (_processManager.IsRunning)
+        if (_processManager.IsEngineDetected())
         {
             await _processManager.StopEngineAsync(_pipeClient);
-            IsEngineProcessRunning = false;
-            EngineActionKey = "Io_LaunchEngine";
-            LastPingMessage = "Stopped";
+            SetEngineProcessState(false);
+            LastPingMessage = LocalizationService.Instance.GetString("Status_Standby");
             return;
         }
 
         if (_processManager.TryStartEngine(out string? err))
         {
-            IsEngineProcessRunning = true;
-            EngineActionKey = "Io_StopEngine";
-            LastPingMessage = "Started";
-            await Task.Delay(250);
-            await RefreshDevicesAsync();
-            await RefreshV2MixerStateAsync();
-            await RefreshSessionsAsync();
-            await RefreshDriverStatusAsync();
-            await RefreshRoutingRulesAsync();
+            ClearError();
+            SetEngineProcessState(true);
+            LastPingMessage = LocalizationService.Instance.GetString("Status_Connected");
+            for (int i = 0; i < 15; i++)
+            {
+                EnginePipeResponse ping = await _pipeClient.PingAsync(200);
+                if (ping.Ok)
+                {
+                    break;
+                }
+                await Task.Delay(100);
+            }
+            await SyncAllFromEngineAsync();
         }
         else
         {
+            SetError(err ?? "Launch failed");
             LastPingMessage = err ?? "Launch failed";
         }
     }
 
     [RelayCommand]
-    private async Task RefreshDevicesAsync()
+    private async Task RestartEngineAsync()
     {
-        IReadOnlyList<AudioDeviceInfo> devices = await _pipeClient.ListDevicesAsync();
-        if (devices.Count == 0)
+        (bool ok, string? err) = await _processManager.RestartEngineAsync(_pipeClient);
+        if (!ok)
         {
+            SetEngineProcessState(false);
+            SetError(err ?? "Restart failed");
             return;
         }
 
-        string[] savedBusIds = OutputBuses.Select(b => b.DeviceId).ToArray();
-        string[] savedChannelIds = DynamicChannels.Select(c => c.DeviceId).ToArray();
+        ClearError();
+        SetEngineProcessState(true);
+        for (int i = 0; i < 15; i++)
+        {
+            EnginePipeResponse ping = await _pipeClient.PingAsync(200);
+            if (ping.Ok)
+            {
+                break;
+            }
+            await Task.Delay(100);
+        }
+
+        await SyncAllFromEngineAsync();
+    }
+
+    [RelayCommand]
+    private async Task RefreshDevicesAsync()
+    {
+        PipeResult<IReadOnlyList<AudioDeviceInfo>> res = await _pipeClient.ListDevicesResultAsync();
+        if (!res.Ok)
+        {
+            SetError(res.Error ?? "Failed to list audio devices.");
+            UpdateDeviceEmptyStates();
+            return;
+        }
+
+        ClearError();
+        IReadOnlyList<AudioDeviceInfo> devices = res.Data;
+        List<AudioDeviceInfo> nextInputs = [];
+        List<AudioDeviceInfo> nextOutputs = [];
+        foreach (AudioDeviceInfo dev in devices)
+        {
+            if (dev.IsInput)
+            {
+                nextInputs.Add(dev);
+            }
+            else
+            {
+                nextOutputs.Add(dev);
+            }
+        }
 
         _suppressSync = true;
         try
         {
-            InputDevices.Clear();
-            OutputDevices.Clear();
-            foreach (AudioDeviceInfo dev in devices)
-            {
-                if (dev.IsInput)
-                {
-                    InputDevices.Add(dev);
-                }
-                else
-                {
-                    OutputDevices.Add(dev);
-                }
-            }
-
-            for (int i = 0; i < OutputBuses.Count && i < savedBusIds.Length; i++)
-            {
-                if (!string.IsNullOrWhiteSpace(savedBusIds[i]))
-                {
-                    OutputBuses[i].DeviceId = savedBusIds[i];
-                }
-            }
-
-            for (int i = 0; i < DynamicChannels.Count && i < savedChannelIds.Length; i++)
-            {
-                if (!string.IsNullOrWhiteSpace(savedChannelIds[i]))
-                {
-                    DynamicChannels[i].DeviceId = savedChannelIds[i];
-                }
-            }
+            ReconcileDeviceCollection(InputDevices, nextInputs);
+            ReconcileDeviceCollection(OutputDevices, nextOutputs);
         }
         finally
         {
             _suppressSync = false;
         }
 
+        UpdateDeviceEmptyStates();
         OnPropertyChanged(nameof(PrimaryOutputBus));
         OnPropertyChanged(nameof(PrimaryMicChannel));
+        UpdateHealthCheck();
+    }
+
+    private static void ReconcileDeviceCollection(ObservableCollection<AudioDeviceInfo> target, IReadOnlyList<AudioDeviceInfo> incoming)
+    {
+        var incomingById = new Dictionary<string, AudioDeviceInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (AudioDeviceInfo dev in incoming)
+        {
+            incomingById[dev.Id] = dev;
+        }
+
+        for (int i = target.Count - 1; i >= 0; i--)
+        {
+            if (!incomingById.ContainsKey(target[i].Id))
+            {
+                target.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < incoming.Count; i++)
+        {
+            AudioDeviceInfo src = incoming[i];
+            int existingIdx = -1;
+            for (int j = 0; j < target.Count; j++)
+            {
+                if (string.Equals(target[j].Id, src.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    existingIdx = j;
+                    break;
+                }
+            }
+
+            if (existingIdx >= 0)
+            {
+                AudioDeviceInfo existing = target[existingIdx];
+                existing.Name = src.Name;
+                existing.IsCapture = src.IsCapture;
+                existing.IsDefault = src.IsDefault;
+                existing.IsVirtual = src.IsVirtual;
+                if (existingIdx != i)
+                {
+                    target.Move(existingIdx, i);
+                }
+            }
+            else
+            {
+                target.Insert(i, src);
+            }
+        }
     }
 
     [RelayCommand]
@@ -633,21 +1072,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             if (channels.Count > 0)
             {
-                DynamicChannels.Clear();
-                foreach (DynamicChannelModel ch in channels)
-                {
-                    DynamicChannels.Add(ch);
-                }
+                ReconcileChannelsInPlace(channels);
                 AttachChannelHandlers();
             }
 
             if (buses.Count > 0)
             {
-                OutputBuses.Clear();
-                foreach (OutputBusModel bus in buses)
-                {
-                    OutputBuses.Add(bus);
-                }
+                ReconcileBusesInPlace(buses);
                 AttachBusHandlers();
             }
         }
@@ -660,17 +1091,111 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(PrimaryOutputBus));
         OnPropertyChanged(nameof(PrimaryMicChannel));
         UpdateHealthCheck();
+        UpdateActiveMicDisplayName();
+    }
+
+    private void ReconcileChannelsInPlace(IReadOnlyList<DynamicChannelModel> incoming)
+    {
+        var incomingById = incoming.ToDictionary(c => c.ChannelId);
+
+        for (int i = DynamicChannels.Count - 1; i >= 0; i--)
+        {
+            if (!incomingById.ContainsKey(DynamicChannels[i].ChannelId))
+            {
+                DynamicChannels.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < incoming.Count; i++)
+        {
+            DynamicChannelModel src = incoming[i];
+            DynamicChannelModel? existing = DynamicChannels.FirstOrDefault(c => c.ChannelId == src.ChannelId);
+            if (existing is not null)
+            {
+                existing.Name = src.Name;
+                existing.SourceType = src.SourceType;
+                if (!string.IsNullOrWhiteSpace(src.DeviceId))
+                {
+                    existing.DeviceId = src.DeviceId;
+                }
+                existing.Color = src.Color;
+                existing.IsSystem = src.IsSystem;
+                existing.Volume = src.Volume;
+                existing.Muted = src.Muted;
+                existing.Solo = src.Solo;
+                existing.Pan = src.Pan;
+                existing.SendA1 = src.SendA1;
+                existing.SendA2 = src.SendA2;
+                existing.SendB1 = src.SendB1;
+                existing.SendB2 = src.SendB2;
+
+                existing.BoundApps.Clear();
+                foreach (string app in src.BoundApps)
+                {
+                    existing.BoundApps.Add(app);
+                }
+            }
+            else
+            {
+                DynamicChannels.Insert(Math.Min(i, DynamicChannels.Count), src);
+            }
+        }
+    }
+
+    private void ReconcileBusesInPlace(IReadOnlyList<OutputBusModel> incoming)
+    {
+        var incomingById = incoming.ToDictionary(b => b.BusId, StringComparer.OrdinalIgnoreCase);
+
+        for (int i = OutputBuses.Count - 1; i >= 0; i--)
+        {
+            if (!incomingById.ContainsKey(OutputBuses[i].BusId))
+            {
+                OutputBuses.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < incoming.Count; i++)
+        {
+            OutputBusModel src = incoming[i];
+            OutputBusModel? existing = OutputBuses.FirstOrDefault(b => string.Equals(b.BusId, src.BusId, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                existing.Role = src.Role;
+                existing.Name = src.Name;
+                if (!string.IsNullOrWhiteSpace(src.DeviceId))
+                {
+                    existing.DeviceId = src.DeviceId;
+                }
+                existing.DeviceName = src.DeviceName;
+                existing.IsVirtual = src.IsVirtual;
+                existing.Volume = src.Volume;
+                existing.Muted = src.Muted;
+                existing.Active = src.Active;
+            }
+            else
+            {
+                OutputBuses.Insert(Math.Min(i, OutputBuses.Count), src);
+            }
+        }
     }
 
     [RelayCommand]
     private async Task RefreshSessionsAsync()
     {
-        IReadOnlyList<AudioSessionInfo> sessions = await _pipeClient.ListSessionsAsync();
+        PipeResult<IReadOnlyList<AudioSessionInfo>> res = await _pipeClient.ListSessionsResultAsync();
+        if (!res.Ok)
+        {
+            SetError(res.Error ?? "Failed to list audio sessions.");
+            HasNoAudioSessions = AudioSessions.Count == 0;
+            return;
+        }
+
         AudioSessions.Clear();
-        foreach (AudioSessionInfo session in sessions)
+        foreach (AudioSessionInfo session in res.Data)
         {
             AudioSessions.Add(session);
         }
+        HasNoAudioSessions = AudioSessions.Count == 0;
     }
 
     [RelayCommand]
@@ -802,17 +1327,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         switch (method)
         {
             case "get_status":
-                DynamicChannelModel? mic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
-                return new
+                return await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    connected = IsEngineConnected,
-                    sample_rate = SampleRate,
-                    buffer_frames = BufferFrames,
-                    mic_muted = mic?.Muted ?? false,
-                };
+                    DynamicChannelModel? mic = PrimaryMicChannel;
+                    return (object)new
+                    {
+                        connected = IsEngineConnected,
+                        sample_rate = SampleRate,
+                        buffer_frames = BufferFrames,
+                        mic_muted = mic?.Muted ?? false,
+                    };
+                });
             case "toggle_mic_mute":
                 await Application.Current.Dispatcher.InvokeAsync(ToggleMicMute);
-                return new { mic_muted = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput)?.Muted ?? false };
+                return await Application.Current.Dispatcher.InvokeAsync(() =>
+                    (object)new { mic_muted = PrimaryMicChannel?.Muted ?? false });
             case "set_channel_volume":
                 if (parameters is JsonElement pVol &&
                     pVol.TryGetProperty("channel_id", out JsonElement chEl) &&
@@ -820,12 +1349,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 {
                     uint cid = chEl.GetUInt32();
                     float vol = volEl.GetSingle();
-                    DynamicChannelModel? ch = DynamicChannels.FirstOrDefault(c => c.ChannelId == cid);
-                    if (ch is not null)
+                    bool updated = await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        await Application.Current.Dispatcher.InvokeAsync(() => ch.Volume = Math.Clamp(vol, 0f, 1.25f));
-                        return new { ok = true };
-                    }
+                        DynamicChannelModel? ch = DynamicChannels.FirstOrDefault(c => c.ChannelId == cid);
+                        if (ch is null) return false;
+                        ch.Volume = Math.Clamp(vol, 0f, 1.5f);
+                        return true;
+                    });
+                    return new { ok = updated };
                 }
                 return new { ok = false };
             case "set_channel_mute":
@@ -835,12 +1366,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 {
                     uint cid = chM.GetUInt32();
                     bool muted = mEl.GetBoolean();
-                    DynamicChannelModel? ch = DynamicChannels.FirstOrDefault(c => c.ChannelId == cid);
-                    if (ch is not null)
+                    bool updated = await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        await Application.Current.Dispatcher.InvokeAsync(() => ch.Muted = muted);
-                        return new { ok = true };
-                    }
+                        DynamicChannelModel? ch = DynamicChannels.FirstOrDefault(c => c.ChannelId == cid);
+                        if (ch is null) return false;
+                        ch.Muted = muted;
+                        return true;
+                    });
+                    return new { ok = updated };
                 }
                 return new { ok = false };
             case "load_preset":
@@ -902,25 +1435,56 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public async Task EnsureEngineAutoStartedAsync()
     {
-        EnginePipeResponse ping = await _pipeClient.PingAsync();
-        if (!ping.Ok && !_processManager.IsRunning)
+        if (Interlocked.Exchange(ref _startupInitialized, 1) != 0)
         {
-            if (_processManager.TryStartEngine(out _))
+            if (!IsEngineConnected || OutputDevices.Count == 0 || InputDevices.Count == 0)
             {
-                IsEngineProcessRunning = true;
-                EngineActionKey = "Io_StopEngine";
+                await SyncAllFromEngineAsync();
+            }
+            return;
+        }
+
+        EnginePipeResponse ping = await _pipeClient.PingAsync(200);
+        if (!ping.Ok && !_processManager.IsEngineDetected())
+        {
+            if (_processManager.TryStartEngine(out string? startErr))
+            {
+                SetEngineProcessState(true);
+                ClearError();
+            }
+            else
+            {
+                SetEngineProcessState(false);
+                SetError(startErr ?? "AtrisWaveEngine.exe could not be started.");
+                return;
+            }
+        }
+        else if (ping.Ok || _processManager.IsEngineDetected())
+        {
+            SetEngineProcessState(true);
+        }
+
+        if (!ping.Ok)
+        {
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                ping = await _pipeClient.PingAsync(200);
+                if (ping.Ok)
+                {
+                    break;
+                }
+
+                await Task.Delay(100);
             }
         }
 
-        for (int attempt = 0; attempt < 25; attempt++)
+        if (!ping.Ok)
         {
-            ping = await _pipeClient.PingAsync();
-            if (ping.Ok)
-            {
-                break;
-            }
-
-            await Task.Delay(150);
+            SetError(ping.Error ?? "Engine did not respond on control pipe.");
+        }
+        else
+        {
+            ClearError();
         }
 
         await SyncAllFromEngineAsync();
@@ -936,7 +1500,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         _isSyncingFromEngine = true;
         _lastAutoSyncUtc = DateTime.UtcNow;
-        _autoSyncAttempts++;
         try
         {
             await RefreshDevicesAsync();
@@ -950,8 +1513,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 await AutoSetupDefaultsAsync();
             }
 
+            if (OutputDevices.Count > 0 && InputDevices.Count > 0)
+            {
+                _autoSyncBackoffSeconds = 2.0;
+            }
+            else
+            {
+                _autoSyncBackoffSeconds = Math.Min(30.0, _autoSyncBackoffSeconds * 2.0);
+            }
+
             OnPropertyChanged(nameof(PrimaryOutputBus));
             OnPropertyChanged(nameof(PrimaryMicChannel));
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
         }
         finally
         {
@@ -979,7 +1555,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return plus >= 0 ? info[..plus] : info;
         }
 
-        return "2.3.0-alpha";
+        return "0.1.0";
     }
 
     [RelayCommand]
@@ -1041,7 +1617,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         UpdateCheckResult res = await GitHubUpdateChecker.CheckForUpdatesAsync(CurrentAppVersion);
         if (!res.Success)
         {
-            UpdateStatusText = res.Error ?? "Offline";
+            UpdateStatusText = res.Error ?? LocalizationService.Instance.GetString("Status_Standby");
             IsUpdateAvailable = false;
             CanDownloadUpdate = false;
             return;
@@ -1131,9 +1707,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        LocalizationService.Instance.PropertyChanged -= OnLocalizationPropertyChanged;
+        MicDsp.PropertyChanged -= OnMicDspPropertyChanged;
+        foreach (DynamicChannelModel ch in DynamicChannels)
+        {
+            ch.PropertyChanged -= OnDynamicChannelPropertyChanged;
+        }
+        foreach (OutputBusModel bus in OutputBuses)
+        {
+            bus.PropertyChanged -= OnOutputBusPropertyChanged;
+        }
+
         _telemetryTimer.Stop();
         _telemetryTimer.Tick -= OnTelemetryTick;
         _micDspDebounceTimer.Stop();
+        _micDspDebounceTimer.Tick -= OnMicDspDebounceTick;
+        _mixDebounceTimer.Stop();
+        _mixDebounceTimer.Tick -= OnMixDebounceTick;
+
         _telemetryReader.Dispose();
         _pipeClient.Dispose();
         _processManager.Dispose();

@@ -7,7 +7,7 @@
 
 #define MyAppName "AtrisWave"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.3.0-alpha"
+  #define MyAppVersion "0.1.0"
 #endif
 #define MyAppPublisher "AtrisWave Contributors"
 #define MyAppURL "https://github.com/merteren97/AtrisWave"
@@ -74,7 +74,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-; Gracefully stop engine, plugin host, and UI before file removal
+; Gracefully stop engine (via --stop), plugin host, and UI before file removal, with taskkill fallback
+Filename: "{app}\{#MyEngineExeName}"; Parameters: "--stop"; Flags: runhidden waituntilterminated; RunOnceId: "StopAtrisWaveEngine"
 Filename: "taskkill.exe"; Parameters: "/IM {#MyAppExeName} /F"; Flags: runhidden; RunOnceId: "KillAtrisWaveUI"
 Filename: "taskkill.exe"; Parameters: "/IM {#MyPluginHostExeName} /F"; Flags: runhidden; RunOnceId: "KillAtrisWavePluginHost"
 Filename: "taskkill.exe"; Parameters: "/IM {#MyWatchdogExeName} /F"; Flags: runhidden; RunOnceId: "KillAtrisWaveWatchdog"

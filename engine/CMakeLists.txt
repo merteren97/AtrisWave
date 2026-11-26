@@ -37,6 +37,8 @@ target_link_libraries(atriswave_engine_core
         ole32.lib
         uuid.lib
         propsys.lib
+        user32.lib
+        shell32.lib
 )
 
 target_compile_definitions(atriswave_engine_core
@@ -55,7 +57,7 @@ if(MSVC)
     )
 endif()
 
-add_executable(AtrisWaveEngine
+add_executable(AtrisWaveEngine WIN32
     src/main.cpp
 )
 
@@ -64,7 +66,7 @@ target_link_libraries(AtrisWaveEngine
         atriswave_engine_core
 )
 
-add_executable(AtrisWaveWatchdog
+add_executable(AtrisWaveWatchdog WIN32
     src/watchdog_main.cpp
 )
 
