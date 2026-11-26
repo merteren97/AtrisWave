@@ -23,6 +23,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        try
+        {
+            Wpf.Ui.Appearance.ApplicationThemeManager.Apply(Wpf.Ui.Appearance.ApplicationTheme.Dark);
+        }
+        catch
+        {
+        }
+
         _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out bool createdNew);
         if (!createdNew)
         {

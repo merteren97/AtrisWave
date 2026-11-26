@@ -17,7 +17,7 @@
                                FontWeight="Bold"
                                Foreground="#22D3EE" />
                 </Border>
-                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Name}" Foreground="#F8FAFC" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             </StackPanel>
         </DataTemplate>
     </UserControl.Resources>
@@ -39,12 +39,11 @@
                 BorderThickness="1"
                 Visibility="{Binding IsHealthWarning, Converter={StaticResource BoolToVisibilityConverter}}">
             <DockPanel>
-                <ui:Button DockPanel.Dock="Right"
-                           Content="{DynamicResource Health_AutoSetup}"
-                           Command="{Binding AutoSetupDefaultsCommand}"
-                           Appearance="Primary"
-                           Padding="12,5"
-                           Margin="12,0,0,0" />
+                <Button DockPanel.Dock="Right"
+                        Style="{StaticResource StudioPrimaryButtonStyle}"
+                        Content="{DynamicResource Health_AutoSetup}"
+                        Command="{Binding AutoSetupDefaultsCommand}"
+                        Margin="12,0,0,0" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse Width="8" Height="8" Fill="#F59E0B" Margin="0,0,10,0" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding HealthWarningMessage}"
@@ -67,12 +66,11 @@
                 BorderThickness="1"
                 Visibility="{Binding HasLastError, Converter={StaticResource BoolToVisibilityConverter}}">
             <DockPanel>
-                <ui:Button DockPanel.Dock="Right"
-                           Content="{DynamicResource Io_RefreshDevices}"
-                           Command="{Binding RefreshDevicesCommand}"
-                           Appearance="Secondary"
-                           Padding="10,4"
-                           Margin="12,0,0,0" />
+                <Button DockPanel.Dock="Right"
+                        Style="{StaticResource StudioSecondaryButtonStyle}"
+                        Content="{DynamicResource Io_RefreshDevices}"
+                        Command="{Binding RefreshDevicesCommand}"
+                        Margin="12,0,0,0" />
                 <TextBlock Text="{Binding LastErrorMessage}"
                            Foreground="#FCA5A5"
                            FontSize="12"
@@ -100,17 +98,16 @@
                         </Grid.RowDefinitions>
 
                         <DockPanel Grid.Row="0" Margin="0,0,0,14">
-                            <ui:Button DockPanel.Dock="Right"
-                                       Command="{Binding ToggleNewChannelCreatorCommand}"
-                                       Appearance="Primary"
-                                       Padding="14,7">
+                            <Button DockPanel.Dock="Right"
+                                    Style="{StaticResource StudioPrimaryButtonStyle}"
+                                    Command="{Binding ToggleNewChannelCreatorCommand}">
                                 <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource Icon_Plus}" Width="13" Height="13" Stretch="Uniform" Stroke="#F8FAFC" StrokeThickness="2" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                    <Path Data="{StaticResource Icon_Plus}" Width="13" Height="13" Stretch="Uniform" Stroke="#FFFFFF" StrokeThickness="2" Margin="0,0,6,0" VerticalAlignment="Center" />
                                     <TextBlock Text="{DynamicResource Ch_AddChannel}" VerticalAlignment="Center" />
                                 </StackPanel>
-                            </ui:Button>
-                            <StackPanel>
-                                <TextBlock Text="{DynamicResource Mixer_SectionTitle}" FontSize="16" FontWeight="SemiBold" />
+                            </Button>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{DynamicResource Mixer_SectionTitle}" FontSize="16" FontWeight="SemiBold" Foreground="#F8FAFC" />
                                 <TextBlock Text="{DynamicResource Mixer_SectionSubtitle}" FontSize="12" Foreground="#94A3B8" Margin="0,2,0,0" />
                             </StackPanel>
                         </DockPanel>
@@ -127,11 +124,11 @@
                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <StackPanel Margin="0,0,10,4">
                                     <TextBlock Text="{DynamicResource Ch_NewNameLabel}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
-                                    <TextBox Width="150" Text="{Binding NewChannelName, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBox Width="150" Height="36" Text="{Binding NewChannelName, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Margin="0,0,10,4">
                                     <TextBlock Text="{DynamicResource Ch_SourceAppGroup}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
-                                    <ComboBox Width="150" SelectedIndex="{Binding NewChannelSourceIndex, Mode=TwoWay}">
+                                    <ComboBox Width="150" Height="36" SelectedIndex="{Binding NewChannelSourceIndex, Mode=TwoWay}">
                                         <ComboBoxItem Content="{DynamicResource Ch_SourceAppGroup}" />
                                         <ComboBoxItem Content="{DynamicResource Ch_SourceMic}" />
                                         <ComboBoxItem Content="{DynamicResource Ch_SourceLoopback}" />
@@ -140,14 +137,15 @@
                                 <StackPanel Margin="0,0,10,4">
                                     <TextBlock Text="{DynamicResource Ch_BindAppLabel}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
                                     <ComboBox Width="160"
+                                              Height="36"
                                               IsEditable="True"
                                               ItemsSource="{Binding AudioSessions}"
                                               DisplayMemberPath="AppName"
                                               Text="{Binding NewChannelAppProcess, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,0,4">
-                                    <ui:Button Content="{DynamicResource Ch_CreateBtn}" Command="{Binding CreateNewChannelCommand}" Appearance="Primary" Margin="0,0,6,0" />
-                                    <ui:Button Content="{DynamicResource Ch_CancelBtn}" Command="{Binding ToggleNewChannelCreatorCommand}" Appearance="Secondary" />
+                                    <Button Style="{StaticResource StudioPrimaryButtonStyle}" Height="36" Content="{DynamicResource Ch_CreateBtn}" Command="{Binding CreateNewChannelCommand}" Margin="0,0,6,0" />
+                                    <Button Style="{StaticResource StudioSecondaryButtonStyle}" Height="36" Content="{DynamicResource Ch_CancelBtn}" Command="{Binding ToggleNewChannelCreatorCommand}" />
                                 </StackPanel>
                             </WrapPanel>
                         </Border>
@@ -191,33 +189,37 @@
 
                                                 <DockPanel Grid.Row="1" Margin="0,0,0,8">
                                                     <Button DockPanel.Dock="Right"
+                                                            Style="{StaticResource StudioChipButtonStyle}"
                                                             Content="×"
                                                             Command="{Binding DataContext.DeleteChannelCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}"
                                                             ToolTip="{DynamicResource Ch_DeleteTooltip}"
                                                             Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            Padding="4,0"
-                                                            FontSize="12"
-                                                            Foreground="#94A3B8"
-                                                            Background="Transparent"
-                                                            BorderThickness="0"
-                                                            Cursor="Hand" />
+                                                            Width="24"
+                                                            Height="24"
+                                                            Padding="0"
+                                                            FontSize="13"
+                                                            Foreground="#CBD5E1"
+                                                            Background="#1E293B"
+                                                            BorderBrush="#334155" />
                                                     <Button DockPanel.Dock="Right"
+                                                            Style="{StaticResource StudioChipButtonStyle}"
                                                             Content="FX"
                                                             Command="{Binding DataContext.OpenChannelDrawerCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}"
                                                             ToolTip="{DynamicResource Channel_FxTooltip}"
-                                                            Padding="6,2"
+                                                            Height="24"
+                                                            Padding="8,0"
                                                             Margin="0,0,4,0"
-                                                            FontSize="10"
+                                                            FontSize="10.5"
                                                             FontWeight="Bold"
-                                                            Foreground="#38BDF8"
-                                                            Background="#2238BDF8"
-                                                            BorderThickness="0"
-                                                            Cursor="Hand" />
+                                                            Foreground="#7DD3FC"
+                                                            Background="#1E3A5F"
+                                                            BorderBrush="#38BDF8" />
                                                     <TextBlock Text="{Binding Name}"
                                                                FontSize="14"
                                                                FontWeight="SemiBold"
+                                                               Foreground="#F8FAFC"
                                                                TextTrimming="CharacterEllipsis"
                                                                VerticalAlignment="Center" />
                                                 </DockPanel>
@@ -347,12 +349,14 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel DataContext="{Binding SelectedDrawerChannel}">
                             <DockPanel Margin="0,0,0,10">
-                                <ui:Button DockPanel.Dock="Right"
-                                           Content="{DynamicResource Drawer_Close}"
-                                           Command="{Binding DataContext.CloseChannelDrawerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                           Padding="8,3"
-                                           FontSize="11" />
-                                <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <Button DockPanel.Dock="Right"
+                                        Style="{StaticResource StudioSecondaryButtonStyle}"
+                                        Content="{DynamicResource Drawer_Close}"
+                                        Command="{Binding DataContext.CloseChannelDrawerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        MinHeight="28"
+                                        Padding="10,4"
+                                        FontSize="11.5" />
+                                <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" Foreground="#F8FAFC" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                             </DockPanel>
 
                             <UniformGrid Columns="2" Margin="0,0,0,10">
@@ -367,11 +371,11 @@
                             <TextBlock Text="{DynamicResource Drawer_DuckSource}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
                             <TextBox Text="{Binding DuckSourceId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
 
-                            <ui:Button Content="{DynamicResource Drawer_SpectrumFocus}"
-                                       Command="{Binding DataContext.FocusSpectrumOnChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                       CommandParameter="{Binding}"
-                                       Appearance="Primary"
-                                       HorizontalAlignment="Stretch" />
+                            <Button Style="{StaticResource StudioPrimaryButtonStyle}"
+                                    Content="{DynamicResource Drawer_SpectrumFocus}"
+                                    Command="{Binding DataContext.FocusSpectrumOnChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"
+                                    HorizontalAlignment="Stretch" />
                         </StackPanel>
                     </ScrollViewer>
                 </Border>
@@ -496,11 +500,11 @@
                                         <TextBlock DockPanel.Dock="Right" Text="{Binding VolumeDbText}" FontFamily="Consolas" FontSize="11" Foreground="#CBD5E1" Width="54" TextAlignment="Right" VerticalAlignment="Center" />
                                         <Slider Minimum="0" Maximum="1.5" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
                                     </DockPanel>
-                                    <ui:Button Content="{DynamicResource Mixer_OpenMicStudio}"
-                                               Command="{Binding DataContext.SelectNavCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                               CommandParameter="1"
-                                               Appearance="Primary"
-                                               HorizontalAlignment="Stretch" />
+                                    <Button Style="{StaticResource StudioPrimaryButtonStyle}"
+                                            Content="{DynamicResource Mixer_OpenMicStudio}"
+                                            Command="{Binding DataContext.SelectNavCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="1"
+                                            HorizontalAlignment="Stretch" />
                                 </StackPanel>
                                 <controls:VuMeterControl Grid.Column="1" PeakLeft="{Binding PeakLeft}" PeakRight="{Binding PeakRight}" RmsLeft="{Binding RmsLeft}" RmsRight="{Binding RmsRight}" IsMuted="{Binding Muted}" IsClipping="{Binding IsClipping}" />
                             </Grid>
@@ -561,10 +565,10 @@
                 </Border>
 
                 <!-- Subtle Streamer Multi-Output Mode Toggle -->
-                <Border Grid.Row="1" Margin="0,12,0,0" Padding="12,8" CornerRadius="10" Background="#990B0F17" BorderBrush="#1EFFFFFF" BorderThickness="1">
+                <Border Grid.Row="1" Margin="0,12,0,0" Padding="12,10" CornerRadius="10" Background="#CC0F1522" BorderBrush="#2A364D" BorderThickness="1">
                     <DockPanel>
-                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding IsStreamerMode, Mode=TwoWay}" />
-                        <TextBlock Text="{DynamicResource Mixer_StreamerMode}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding IsStreamerMode, Mode=TwoWay}" VerticalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource Mixer_StreamerMode}" FontSize="11.5" Foreground="#CBD5E1" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0" />
                     </DockPanel>
                 </Border>
             </Grid>

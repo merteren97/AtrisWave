@@ -613,7 +613,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.1.0\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.1.1\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,

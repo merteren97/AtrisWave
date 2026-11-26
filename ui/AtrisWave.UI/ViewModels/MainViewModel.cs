@@ -1555,7 +1555,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return plus >= 0 ? info[..plus] : info;
         }
 
-        return "0.1.0";
+        return "0.1.1";
     }
 
     [RelayCommand]

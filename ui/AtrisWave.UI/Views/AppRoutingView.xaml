@@ -14,22 +14,22 @@
         <Border Grid.Row="0"
                 Margin="0,0,0,10"
                 Padding="14,10"
-                CornerRadius="10"
-                Background="#990B0F17"
-                BorderBrush="#22FFFFFF"
+                CornerRadius="12"
+                Background="#E60F1522"
+                BorderBrush="#2A364D"
                 BorderThickness="1">
             <DockPanel>
-                <ui:Button DockPanel.Dock="Right"
-                           Content="{DynamicResource Driver_RefreshStatus}"
-                           Command="{Binding RefreshDriverStatusCommand}"
-                           Appearance="Secondary"
-                           Padding="12,5" />
+                <Button DockPanel.Dock="Right"
+                        Style="{StaticResource StudioSecondaryButtonStyle}"
+                        Content="{DynamicResource Driver_RefreshStatus}"
+                        Command="{Binding RefreshDriverStatusCommand}"
+                        Margin="12,0,0,0" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse Width="10"
                              Height="10"
                              Margin="0,0,10,0"
                              Fill="{Binding IsDriverInstalled, Converter={StaticResource ConnectionStatusBrushConverter}}" />
-                    <TextBlock FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center">
+                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center">
                         <TextBlock.Text>
                             <MultiBinding Converter="{StaticResource LocKeyConverter}">
                                 <Binding Path="DriverStatusKey" />
@@ -44,18 +44,21 @@
         <!-- One-Click & Drag-and-Drop Virtual Channel Assignment Pills -->
         <Border Grid.Row="1"
                 Margin="0,0,0,10"
-                Padding="14,10"
-                CornerRadius="10"
-                Background="#990B0F17"
-                BorderBrush="#22FFFFFF"
+                Padding="14,12"
+                CornerRadius="12"
+                Background="#E60F1522"
+                BorderBrush="#2A364D"
                 BorderThickness="1">
             <StackPanel>
                 <TextBlock Text="{DynamicResource Driver_DropHint}"
-                           FontSize="11"
+                           FontSize="11.5"
                            Foreground="#94A3B8"
                            Margin="0,0,0,8" />
                 <UniformGrid Rows="1" Columns="4">
-                    <Button Content="{DynamicResource Channel_Game}"
+                    <Button Style="{StaticResource StudioChipButtonStyle}"
+                            Height="36"
+                            HorizontalAlignment="Stretch"
+                            Content="{DynamicResource Channel_Game}"
                             Command="{Binding AssignSelectedSessionToChannelCommand}"
                             CommandParameter="Game"
                             Tag="Game"
@@ -63,11 +66,13 @@
                             DragOver="OnChannelPillDragOver"
                             Drop="OnChannelPillDrop"
                             Margin="0,0,6,0"
-                            Padding="10,7"
-                            Background="#26A855F7"
-                            BorderBrush="#77A855F7"
-                            FontWeight="SemiBold" />
-                    <Button Content="{DynamicResource Channel_Chat}"
+                            Background="#3B1D5E"
+                            BorderBrush="#A855F7"
+                            Foreground="#F3E8FF" />
+                    <Button Style="{StaticResource StudioChipButtonStyle}"
+                            Height="36"
+                            HorizontalAlignment="Stretch"
+                            Content="{DynamicResource Channel_Chat}"
                             Command="{Binding AssignSelectedSessionToChannelCommand}"
                             CommandParameter="Chat"
                             Tag="Chat"
@@ -75,11 +80,13 @@
                             DragOver="OnChannelPillDragOver"
                             Drop="OnChannelPillDrop"
                             Margin="3,0,3,0"
-                            Padding="10,7"
-                            Background="#2610B981"
-                            BorderBrush="#7710B981"
-                            FontWeight="SemiBold" />
-                    <Button Content="{DynamicResource Channel_Media}"
+                            Background="#123C2F"
+                            BorderBrush="#10B981"
+                            Foreground="#D1FAE5" />
+                    <Button Style="{StaticResource StudioChipButtonStyle}"
+                            Height="36"
+                            HorizontalAlignment="Stretch"
+                            Content="{DynamicResource Channel_Media}"
                             Command="{Binding AssignSelectedSessionToChannelCommand}"
                             CommandParameter="Media"
                             Tag="Media"
@@ -87,11 +94,13 @@
                             DragOver="OnChannelPillDragOver"
                             Drop="OnChannelPillDrop"
                             Margin="3,0,3,0"
-                            Padding="10,7"
-                            Background="#26F59E0B"
-                            BorderBrush="#77F59E0B"
-                            FontWeight="SemiBold" />
-                    <Button Content="{DynamicResource Channel_Aux}"
+                            Background="#452C0A"
+                            BorderBrush="#F59E0B"
+                            Foreground="#FEF3C7" />
+                    <Button Style="{StaticResource StudioChipButtonStyle}"
+                            Height="36"
+                            HorizontalAlignment="Stretch"
+                            Content="{DynamicResource Channel_Aux}"
                             Command="{Binding AssignSelectedSessionToChannelCommand}"
                             CommandParameter="Aux"
                             Tag="Aux"
@@ -99,10 +108,9 @@
                             DragOver="OnChannelPillDragOver"
                             Drop="OnChannelPillDrop"
                             Margin="6,0,0,0"
-                            Padding="10,7"
-                            Background="#26EC4899"
-                            BorderBrush="#77EC4899"
-                            FontWeight="SemiBold" />
+                            Background="#4A1735"
+                            BorderBrush="#EC4899"
+                            Foreground="#FCE7F3" />
                 </UniformGrid>
             </StackPanel>
         </Border>
@@ -128,13 +136,13 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Grid.Row="0" Margin="0,0,0,12">
-                        <ui:Button DockPanel.Dock="Right"
-                                   Content="{DynamicResource Routing_RefreshSessions}"
-                                   Command="{Binding RefreshSessionsCommand}"
-                                   Appearance="Primary"
-                                   Padding="14,7" />
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource Routing_Title}" FontSize="15" FontWeight="SemiBold" />
+                        <Button DockPanel.Dock="Right"
+                                Style="{StaticResource StudioPrimaryButtonStyle}"
+                                Content="{DynamicResource Routing_RefreshSessions}"
+                                Command="{Binding RefreshSessionsCommand}"
+                                Margin="12,0,0,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource Routing_Title}" FontSize="15" FontWeight="SemiBold" Foreground="#F8FAFC" />
                             <TextBlock Text="{DynamicResource Routing_Subtitle}" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0" />
                         </StackPanel>
                     </DockPanel>
@@ -212,14 +220,15 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Grid.Row="0" Margin="0,0,0,12">
-                        <ui:Button DockPanel.Dock="Right"
-                                   Content="{DynamicResource Rules_ApplyAll}"
-                                   Command="{Binding ApplyAllRoutingRulesCommand}"
-                                   Appearance="Secondary"
-                                   Padding="10,6" />
+                        <Button DockPanel.Dock="Right"
+                                Style="{StaticResource StudioSecondaryButtonStyle}"
+                                Content="{DynamicResource Rules_ApplyAll}"
+                                Command="{Binding ApplyAllRoutingRulesCommand}"
+                                Margin="12,0,0,0" />
                         <TextBlock Text="{DynamicResource Rules_Title}"
                                    FontSize="15"
                                    FontWeight="SemiBold"
+                                   Foreground="#F8FAFC"
                                    VerticalAlignment="Center" />
                     </DockPanel>
 
@@ -231,17 +240,20 @@
                                             Padding="10,8"
                                             CornerRadius="8"
                                             Background="#CC111827"
-                                            BorderBrush="#22FFFFFF"
+                                            BorderBrush="#2A364D"
                                             BorderThickness="1">
                                         <DockPanel>
-                                            <ui:Button DockPanel.Dock="Right"
-                                                       Content="{DynamicResource Rules_Delete}"
-                                                       Command="{Binding DataContext.DeleteRoutingRuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                       CommandParameter="{Binding}"
-                                                       Appearance="Danger"
-                                                       Padding="8,4" />
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding ProcessName}" FontWeight="SemiBold" FontSize="13" />
+                                            <Button DockPanel.Dock="Right"
+                                                    Style="{StaticResource StudioDangerButtonStyle}"
+                                                    MinHeight="28"
+                                                    Padding="10,4"
+                                                    FontSize="11.5"
+                                                    Content="{DynamicResource Rules_Delete}"
+                                                    Command="{Binding DataContext.DeleteRoutingRuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Margin="8,0,0,0" />
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding ProcessName}" FontWeight="SemiBold" FontSize="13" Foreground="#F8FAFC" />
                                                 <TextBlock FontSize="11" Foreground="#94A3B8">
                                                     <TextBlock.Text>
                                                         <MultiBinding Converter="{StaticResource LocKeyConverter}">

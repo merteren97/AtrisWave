@@ -11,19 +11,19 @@
 
         <Border Grid.Row="0"
                 Margin="0,0,0,12"
-                Padding="16,10"
-                CornerRadius="10"
-                Background="#990B0F17"
-                BorderBrush="#22FFFFFF"
+                Padding="16,12"
+                CornerRadius="12"
+                Background="#E60F1522"
+                BorderBrush="#2A364D"
                 BorderThickness="1">
             <DockPanel>
-                <ui:Button DockPanel.Dock="Right"
-                           Content="{DynamicResource Sb_StopAll}"
-                           Command="{Binding StopAllSoundboardCommand}"
-                           Appearance="Danger"
-                           Padding="16,7" />
-                <StackPanel>
-                    <TextBlock Text="{DynamicResource Sb_Title}" FontSize="16" FontWeight="SemiBold" />
+                <Button DockPanel.Dock="Right"
+                        Style="{StaticResource StudioDangerButtonStyle}"
+                        Content="{DynamicResource Sb_StopAll}"
+                        Command="{Binding StopAllSoundboardCommand}"
+                        Margin="12,0,0,0" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{DynamicResource Sb_Title}" FontSize="16" FontWeight="SemiBold" Foreground="#F8FAFC" />
                     <TextBlock Text="{DynamicResource Sb_Subtitle}" FontSize="12" Foreground="#94A3B8" Margin="0,2,0,0" />
                 </StackPanel>
             </DockPanel>
@@ -58,18 +58,23 @@
                                         Margin="0,0,0,8"
                                         Background="{Binding AccentColor, Converter={StaticResource HexToBrushConverter}}" />
 
-                                <DockPanel Grid.Row="1" Margin="0,0,0,6">
-                                    <ui:Button DockPanel.Dock="Right"
-                                               Content="{DynamicResource Sb_BrowseWav}"
-                                               Command="{Binding DataContext.BrowseSoundboardWavCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                               CommandParameter="{Binding}"
-                                               Padding="8,3"
-                                               FontSize="11" />
+                                <DockPanel Grid.Row="1" Margin="0,0,0,8">
+                                    <Button DockPanel.Dock="Right"
+                                            Style="{StaticResource StudioSecondaryButtonStyle}"
+                                            MinHeight="28"
+                                            Padding="10,4"
+                                            FontSize="11"
+                                            Margin="6,0,0,0"
+                                            Content="{DynamicResource Sb_BrowseWav}"
+                                            Command="{Binding DataContext.BrowseSoundboardWavCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}" />
                                     <TextBox Text="{Binding Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             MinHeight="28"
+                                             Padding="6,2"
                                              FontWeight="SemiBold"
-                                             FontSize="13"
-                                             Background="Transparent"
-                                             BorderThickness="0"
+                                             FontSize="12.5"
+                                             Background="#141C2B"
+                                             BorderBrush="#263248"
                                              VerticalAlignment="Center" />
                                 </DockPanel>
 
@@ -105,16 +110,18 @@
                                 <DockPanel Grid.Row="3">
                                     <ToggleButton DockPanel.Dock="Right"
                                                   Style="{StaticResource StudioToggleButtonStyle}"
+                                                  Height="34"
                                                   Content="{DynamicResource Sb_Loop}"
                                                   IsChecked="{Binding Loop, Mode=TwoWay}"
                                                   Margin="6,0,0,0"
-                                                  Padding="10,5" />
-                                    <ui:Button Content="{DynamicResource Sb_Play}"
-                                               Command="{Binding DataContext.PlaySoundboardPadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                               CommandParameter="{Binding}"
-                                               IsEnabled="{Binding HasFile}"
-                                               Appearance="Primary"
-                                               HorizontalAlignment="Stretch" />
+                                                  Padding="12,0" />
+                                    <Button Style="{StaticResource StudioPrimaryButtonStyle}"
+                                            Height="34"
+                                            Content="{DynamicResource Sb_Play}"
+                                            Command="{Binding DataContext.PlaySoundboardPadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            IsEnabled="{Binding HasFile}"
+                                            HorizontalAlignment="Stretch" />
                                 </DockPanel>
                             </Grid>
                         </Border>
