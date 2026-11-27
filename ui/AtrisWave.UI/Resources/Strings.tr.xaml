@@ -108,7 +108,7 @@
     <sys:String x:Key="Health_AllReady">Ses yönlendirme hazır (A1 izleme ve Mikrofon etkin).</sys:String>
     <sys:String x:Key="Health_AutoSetup">5 Sn Otomatik Kur</sys:String>
 
-    <sys:String x:Key="Ch_AddChannel">+ Kanal Ekle</sys:String>
+    <sys:String x:Key="Ch_AddChannel">Kanal Ekle</sys:String>
     <sys:String x:Key="Ch_NewNameLabel">Kanal Adı</sys:String>
     <sys:String x:Key="Ch_SourceAppGroup">Uygulama Grubu</sys:String>
     <sys:String x:Key="Ch_SourceMic">Donanım Mikrofonu</sys:String>

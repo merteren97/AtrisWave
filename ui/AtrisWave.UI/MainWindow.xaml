@@ -214,7 +214,7 @@
         <!-- Obsidian Studio Shell: Left Fluent Navigation Rail + Active View -->
         <Grid Grid.Row="1" Margin="14,12,14,14">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="156" />
+                <ColumnDefinition Width="176" />
                 <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
@@ -228,7 +228,9 @@
                     BorderThickness="1">
                 <ListBox SelectedIndex="{Binding SelectedNavIndex, Mode=TwoWay}"
                          Background="Transparent"
-                         BorderThickness="0">
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Padding" Value="10,10" />

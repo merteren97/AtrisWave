@@ -606,9 +606,12 @@
                                     <ColumnDefinition Width="32" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Full-surface ToggleButton MUST use an explicit transparent Border template + ClickMode=Press -->
+                                <!-- Full-surface ToggleButton MUST clear Wpf.Ui's implicit ToggleButton style (which sets Left/Top alignment and collapses 0x0!) -->
                                 <ToggleButton x:Name="DropDownToggle"
+                                              Style="{x:Null}"
                                               Grid.ColumnSpan="2"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch"
                                               Focusable="False"
                                               ClickMode="Press"
                                               Cursor="Hand"

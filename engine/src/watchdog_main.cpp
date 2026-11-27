@@ -59,7 +59,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             snapshot_path = args[++i];
         } else if (arg == "--version") {
             attach_parent_console_if_needed();
-            std::cout << "AtrisWaveWatchdog 0.1.1\n";
+            std::cout << "AtrisWaveWatchdog 0.1.2\n";
             return 0;
         }
     }

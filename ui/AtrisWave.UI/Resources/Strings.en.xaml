@@ -108,7 +108,7 @@
     <sys:String x:Key="Health_AllReady">Audio routing ready (A1 monitor &amp; Microphone active).</sys:String>
     <sys:String x:Key="Health_AutoSetup">1-Click Auto-Setup</sys:String>
 
-    <sys:String x:Key="Ch_AddChannel">+ Add Channel</sys:String>
+    <sys:String x:Key="Ch_AddChannel">Add Channel</sys:String>
     <sys:String x:Key="Ch_NewNameLabel">Channel Name</sys:String>
     <sys:String x:Key="Ch_SourceAppGroup">App Group</sys:String>
     <sys:String x:Key="Ch_SourceMic">Hardware Mic</sys:String>
