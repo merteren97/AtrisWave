@@ -210,6 +210,9 @@ public:
         [[nodiscard]] virtual V2CommandResult unbind_app_from_channel(const std::string& process_name,
                                                                       uint32_t channel_id) = 0;
         [[nodiscard]] virtual V2CommandResult auto_setup_defaults() = 0;
+        [[nodiscard]] virtual V2CommandResult set_system_default_virtual(bool /*enabled*/) {
+            return {false, "unsupported", 0};
+        }
 
         // v2.1 Soundboard & Spectrum Analyzer
         [[nodiscard]] virtual SoundboardPlayResult play_soundboard(const std::string& path,

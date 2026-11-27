@@ -221,6 +221,11 @@
     <sys:String x:Key="Driver_StatusActive">AtrisWaveVAD.sys Active (Zero-Copy Kernel Virtual Audio)</sys:String>
     <sys:String x:Key="Driver_StatusBridge">Phase 1 Bridge Mode (WASAPI / VB-Cable / Process Loopback)</sys:String>
     <sys:String x:Key="Driver_RefreshStatus">Check Driver</sys:String>
+    <sys:String x:Key="Driver_InstallBtn">Install Virtual Driver (Test-Sign)</sys:String>
+    <sys:String x:Key="Driver_SetSystemDefault">Use AtrisWave System as Default</sys:String>
+    <sys:String x:Key="Driver_RestoreDefault">Restore Physical Default</sys:String>
+    <sys:String x:Key="Driver_DiscordObsGuide">Routing Tip: Windows Output → AtrisWave System · Discord Input → AtrisWave Mic (DSP) · Discord Output → AtrisWave Chat · OBS Audio → AtrisWave Stream Mix.</sys:String>
+    <sys:String x:Key="Drawer_VirtualSource">Virtual Audio Input Device</sys:String>
     <sys:String x:Key="Driver_DropHint">Drag an app row onto a virtual bus pill (or click a pill with a row selected) to save a persistent routing rule:</sys:String>
     <sys:String x:Key="Rules_Title">Saved Persistent Routing Rules</sys:String>
     <sys:String x:Key="Rules_ApplyAll">Apply All Rules</sys:String>

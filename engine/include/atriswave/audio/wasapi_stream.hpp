@@ -10,7 +10,8 @@ namespace atriswave::audio {
 
 enum class StreamDirection {
     Capture,
-    Render
+    Render,
+    Loopback
 };
 
 /// Real-time event-driven WASAPI shared-mode stream (`IAudioClient3::InitializeSharedAudioStream`

@@ -70,7 +70,7 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(DDK_LIB_PATH)wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(DDK_LIB_PATH)portcls.lib;$(DDK_LIB_PATH)stdunk.lib;$(DDK_LIB_PATH)ksguid.lib;$(DDK_LIB_PATH)wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>
       <CETCompat Condition="'$(Platform)'=='x64'">true</CETCompat>
     </Link>
@@ -94,6 +94,7 @@
     <ClCompile Include="src\driver_entry.cpp" />
     <ClCompile Include="src\control_device.cpp" />
     <ClCompile Include="src\virtual_endpoints.cpp" />
+    <ClCompile Include="src\wavert_miniport.cpp" />
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

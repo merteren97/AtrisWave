@@ -2,16 +2,16 @@
 
 #include "atriswave/driver_ioctl.h"
 
-#ifdef __cplusplus
-#ifndef _KERNEL_MODE
+#if defined(__cplusplus) && !defined(_KERNEL_MODE)
 #include <atomic>
-#endif
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #else
 #include <stddef.h>
+#ifndef _KERNEL_MODE
 #include <stdint.h>
+#endif
 #include <string.h>
 #endif
 

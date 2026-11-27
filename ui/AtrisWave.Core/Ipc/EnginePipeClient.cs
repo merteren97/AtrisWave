@@ -318,6 +318,9 @@ public sealed class EnginePipeClient : IDisposable
     public Task<EnginePipeResponse> AutoSetupDefaultsAsync(CancellationToken cancellationToken = default)
         => SendCommandAsync("auto_setup_defaults", null, cancellationToken);
 
+    public Task<EnginePipeResponse> SetSystemDefaultVirtualAsync(bool enabled, CancellationToken cancellationToken = default)
+        => SendCommandAsync("set_system_default_virtual", new { enabled }, cancellationToken);
+
     // --- v2.1 Soundboard & Spectrum Commands ---
 
     public Task<EnginePipeResponse> PlaySoundboardAsync(

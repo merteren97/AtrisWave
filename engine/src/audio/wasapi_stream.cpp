@@ -208,7 +208,8 @@ bool WasapiStream::open(const std::string& device_id,
     }
 
     bool initialized = false;
-    if (client3) {
+    const bool is_loopback = (direction == StreamDirection::Loopback);
+    if (!is_loopback && client3) {
         UINT32 default_period = 0;
         UINT32 fundamental_period = 0;
         UINT32 min_period = 0;
@@ -229,10 +230,13 @@ bool WasapiStream::open(const std::string& device_id,
     }
 
     if (!initialized) {
+        const DWORD stream_flags = is_loopback
+            ? AUDCLNT_STREAMFLAGS_LOOPBACK
+            : AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
         const HRESULT init_hr = impl->client->Initialize(
             AUDCLNT_SHAREMODE_SHARED,
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-            0,
+            stream_flags,
+            is_loopback ? 200000 : 0,
             0,
             mix_fmt,
             nullptr);
@@ -262,14 +266,14 @@ bool WasapiStream::open(const std::string& device_id,
         return false;
     }
 
-    if (FAILED(impl->client->SetEventHandle(audio_evt))) {
+    if (!is_loopback && FAILED(impl->client->SetEventHandle(audio_evt))) {
         CloseHandle(audio_evt);
         CloseHandle(stop_evt);
         delete impl;
         return false;
     }
 
-    if (direction == StreamDirection::Capture) {
+    if (direction == StreamDirection::Capture || is_loopback) {
         hr = impl->client->GetService(__uuidof(IAudioCaptureClient), impl->capture.put_void());
     } else {
         hr = impl->client->GetService(__uuidof(IAudioRenderClient), impl->render.put_void());
@@ -346,15 +350,21 @@ void WasapiStream::audio_thread_loop() {
     };
 
     while (running_.load(std::memory_order_acquire)) {
-        const DWORD wait_res = WaitForMultipleObjects(2, handles, FALSE, 500);
-        if (wait_res == WAIT_OBJECT_0) {
-            break;
-        }
-        if (wait_res != WAIT_OBJECT_0 + 1) {
-            continue;
+        if (direction_ == StreamDirection::Loopback) {
+            if (WaitForSingleObject(static_cast<HANDLE>(stop_event_), 5) == WAIT_OBJECT_0) {
+                break;
+            }
+        } else {
+            const DWORD wait_res = WaitForMultipleObjects(2, handles, FALSE, 500);
+            if (wait_res == WAIT_OBJECT_0) {
+                break;
+            }
+            if (wait_res != WAIT_OBJECT_0 + 1) {
+                continue;
+            }
         }
 
-        if (direction_ == StreamDirection::Capture) {
+        if (direction_ == StreamDirection::Capture || direction_ == StreamDirection::Loopback) {
             UINT32 packet_frames = 0;
             HRESULT hr = audio_client_->capture->GetNextPacketSize(&packet_frames);
             while (SUCCEEDED(hr) && packet_frames > 0) {

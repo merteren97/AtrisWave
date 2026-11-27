@@ -613,7 +613,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.1.2\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.1.3\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -1040,6 +1040,15 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
             return make_err_response(id, res.error.empty() ? "auto_setup_failed" : res.error);
         }
         return make_ok_response(id, "{\"configured\":true}");
+    }
+
+    if (*cmd == "set_system_default_virtual") {
+        const bool enabled = extract_json_bool(line, "enabled").value_or(true);
+        const auto res = handler_->set_system_default_virtual(enabled);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "set_system_default_virtual_failed" : res.error);
+        }
+        return make_ok_response(id, std::string("{\"enabled\":") + (enabled ? "true}" : "false}"));
     }
 
     if (*cmd == "play_soundboard") {

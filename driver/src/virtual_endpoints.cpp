@@ -1,33 +1,35 @@
 #include "driver_internal.h"
 
-static constexpr uint32_t kDefaultRingFrames = 2048u;
+static constexpr uint32_t kDefaultRingFrames = 4096u;
 static constexpr uint32_t kDefaultSampleRate = 48000u;
 static constexpr uint32_t kDefaultChannels = 2u;
 
 /*
  * 16 pre-provisioned pooled virtual audio endpoints:
  * - Slot 0 (System): always connected, catches default Windows audio
- * - Slot 1 (MicOut): default connected, processed mic output
- * - Slot 2 (StreamMix): default connected, OBS / stream mix output
- * - Slots 3..15 (Ch 4..16): JACKDESC2_PRESENCE_DETECT_CAPABILITY dynamic pool (default unplugged)
+ * - Slot 1 (Mic): default connected, processed microphone output (B1 -> Discord / OBS)
+ * - Slot 2 (Stream Mix): default connected, broadcast / OBS mix output (B2 -> OBS)
+ * - Slot 3 (Game): default connected, dedicated Games playback channel
+ * - Slot 4 (Chat): default connected, dedicated Chat / Discord playback channel
+ * - Slots 5..15 (Media, Aux, Ch 8..16): dynamic jack-presence pool toggled via IOCTL
  */
 static const AtrisWaveEndpointDescriptor kEndpointDescriptors[ATRISWAVE_VAD_ENDPOINT_COUNT] = {
-    { 0u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave System",     L"System",    kDefaultSampleRate, kDefaultChannels, 1u, 0u },
-    { 1u,  ATRISWAVE_ENDPOINT_CAPTURE, L"AtrisWave Mic",        L"MicOut",    kDefaultSampleRate, kDefaultChannels, 1u, 1u },
-    { 2u,  ATRISWAVE_ENDPOINT_CAPTURE, L"AtrisWave Stream Mix", L"StreamMix", kDefaultSampleRate, kDefaultChannels, 1u, 1u },
-    { 3u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 4",       L"Ch4",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 4u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 5",       L"Ch5",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 5u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 6",       L"Ch6",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 6u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 7",       L"Ch7",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 7u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 8",       L"Ch8",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 8u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 9",       L"Ch9",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 9u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 10",      L"Ch10",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 10u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 11",      L"Ch11",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 11u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 12",      L"Ch12",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 12u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 13",      L"Ch13",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 13u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 14",      L"Ch14",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 14u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 15",      L"Ch15",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
-    { 15u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 16",      L"Ch16",      kDefaultSampleRate, kDefaultChannels, 0u, 1u }
+    { 0u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave System",     L"WaveSystem",    L"TopoSystem",    kDefaultSampleRate, kDefaultChannels, 1u, 0u },
+    { 1u,  ATRISWAVE_ENDPOINT_CAPTURE, L"AtrisWave Mic",        L"WaveMic",       L"TopoMic",       kDefaultSampleRate, kDefaultChannels, 1u, 1u },
+    { 2u,  ATRISWAVE_ENDPOINT_CAPTURE, L"AtrisWave Stream Mix", L"WaveStreamMix", L"TopoStreamMix", kDefaultSampleRate, kDefaultChannels, 1u, 1u },
+    { 3u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Game",       L"WaveGame",      L"TopoGame",      kDefaultSampleRate, kDefaultChannels, 1u, 1u },
+    { 4u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Chat",       L"WaveChat",      L"TopoChat",      kDefaultSampleRate, kDefaultChannels, 1u, 1u },
+    { 5u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Media",      L"WaveMedia",     L"TopoMedia",     kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 6u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Aux",        L"WaveAux",       L"TopoAux",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 7u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 8",       L"WaveCh8",       L"TopoCh8",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 8u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 9",       L"WaveCh9",       L"TopoCh9",       kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 9u,  ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 10",      L"WaveCh10",      L"TopoCh10",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 10u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 11",      L"WaveCh11",      L"TopoCh11",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 11u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 12",      L"WaveCh12",      L"TopoCh12",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 12u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 13",      L"WaveCh13",      L"TopoCh13",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 13u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 14",      L"WaveCh14",      L"TopoCh14",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 14u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 15",      L"WaveCh15",      L"TopoCh15",      kDefaultSampleRate, kDefaultChannels, 0u, 1u },
+    { 15u, ATRISWAVE_ENDPOINT_RENDER,  L"AtrisWave Ch 16",      L"WaveCh16",      L"TopoCh16",      kDefaultSampleRate, kDefaultChannels, 0u, 1u }
 };
 
 const AtrisWaveEndpointDescriptor* AtrisWaveGetEndpointDescriptors(uint32_t* out_count)
@@ -38,7 +40,7 @@ const AtrisWaveEndpointDescriptor* AtrisWaveGetEndpointDescriptors(uint32_t* out
     return kEndpointDescriptors;
 }
 
-NTSTATUS AtrisWaveInitializeEndpoints(PATRISWAVE_DEVICE_CONTEXT ctx)
+NTSTATUS AtrisWaveInitializeEndpoints(PATRISWAVE_ADAPTER_CONTEXT ctx)
 {
     if (ctx == nullptr) {
         return STATUS_INVALID_PARAMETER;
@@ -83,7 +85,7 @@ NTSTATUS AtrisWaveInitializeEndpoints(PATRISWAVE_DEVICE_CONTEXT ctx)
     return STATUS_SUCCESS;
 }
 
-void AtrisWaveCleanupEndpoints(PATRISWAVE_DEVICE_CONTEXT ctx)
+void AtrisWaveCleanupEndpoints(PATRISWAVE_ADAPTER_CONTEXT ctx)
 {
     if (ctx == nullptr) {
         return;
@@ -91,6 +93,7 @@ void AtrisWaveCleanupEndpoints(PATRISWAVE_DEVICE_CONTEXT ctx)
 
     for (uint32_t i = 0; i < ATRISWAVE_VAD_ENDPOINT_COUNT; ++i) {
         AtrisWaveEndpointRuntime* ep = &ctx->endpoints[i];
+        ep->topo_port_events = nullptr;
         if (ep->pcm_buffer != nullptr) {
             ExFreePoolWithTag(ep->pcm_buffer, ATRISWAVE_POOL_TAG);
             ep->pcm_buffer = nullptr;
@@ -100,7 +103,7 @@ void AtrisWaveCleanupEndpoints(PATRISWAVE_DEVICE_CONTEXT ctx)
 }
 
 NTSTATUS AtrisWaveGetEndpointStats(
-    PATRISWAVE_DEVICE_CONTEXT ctx,
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
     uint32_t endpoint_id,
     AtrisWaveVadEndpointStats* out_stats)
 {
@@ -108,22 +111,23 @@ NTSTATUS AtrisWaveGetEndpointStats(
         return STATUS_INVALID_PARAMETER;
     }
 
-    WdfSpinLockAcquire(ctx->state_lock);
+    KIRQL old_irql;
+    KeAcquireSpinLock(&ctx->state_lock, &old_irql);
     const AtrisWaveEndpointRuntime* ep = &ctx->endpoints[endpoint_id];
     out_stats->endpoint_id = endpoint_id;
     out_stats->sample_rate = ep->ring_header.sample_rate;
     out_stats->channels = ep->ring_header.channels;
     out_stats->active = ep->active;
     out_stats->xrun_count = ep->ring_header.xrun_count;
-    out_stats->reserved = 0u;
+    out_stats->reserved = ep->jack_connected;
     out_stats->frames_transferred = ep->frames_transferred;
-    WdfSpinLockRelease(ctx->state_lock);
+    KeReleaseSpinLock(&ctx->state_lock, old_irql);
 
     return STATUS_SUCCESS;
 }
 
 NTSTATUS AtrisWaveSetEndpointFormat(
-    PATRISWAVE_DEVICE_CONTEXT ctx,
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
     uint32_t endpoint_id,
     uint32_t sample_rate,
     uint32_t channels)
@@ -139,23 +143,24 @@ NTSTATUS AtrisWaveSetEndpointFormat(
         return STATUS_INVALID_PARAMETER;
     }
 
-    WdfSpinLockAcquire(ctx->state_lock);
+    KIRQL old_irql;
+    KeAcquireSpinLock(&ctx->state_lock, &old_irql);
     AtrisWaveEndpointRuntime* ep = &ctx->endpoints[endpoint_id];
     if (ep->active != 0u) {
-        WdfSpinLockRelease(ctx->state_lock);
+        KeReleaseSpinLock(&ctx->state_lock, old_irql);
         return STATUS_DEVICE_BUSY;
     }
     ep->ring_header.sample_rate = sample_rate;
     ep->ring_header.channels = channels;
     ep->ring_header.write_frame_idx = 0u;
     ep->ring_header.read_frame_idx = 0u;
-    WdfSpinLockRelease(ctx->state_lock);
+    KeReleaseSpinLock(&ctx->state_lock, old_irql);
 
     return STATUS_SUCCESS;
 }
 
 NTSTATUS AtrisWaveMapEndpointRing(
-    PATRISWAVE_DEVICE_CONTEXT ctx,
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
     uint32_t endpoint_id,
     AtrisWaveVadRingMapInfo* out_info)
 {
@@ -163,7 +168,8 @@ NTSTATUS AtrisWaveMapEndpointRing(
         return STATUS_INVALID_PARAMETER;
     }
 
-    WdfSpinLockAcquire(ctx->state_lock);
+    KIRQL old_irql;
+    KeAcquireSpinLock(&ctx->state_lock, &old_irql);
     AtrisWaveEndpointRuntime* ep = &ctx->endpoints[endpoint_id];
     ep->ring_header.state = ATRISWAVE_VAD_RING_STATE_RUNNING;
     ep->active = 1u;
@@ -178,13 +184,13 @@ NTSTATUS AtrisWaveMapEndpointRing(
         sizeof(float);
     out_info->state = ep->ring_header.state;
     out_info->reserved = 0u;
-    WdfSpinLockRelease(ctx->state_lock);
+    KeReleaseSpinLock(&ctx->state_lock, old_irql);
 
     return STATUS_SUCCESS;
 }
 
 NTSTATUS AtrisWaveSetEndpointConnected(
-    PATRISWAVE_DEVICE_CONTEXT ctx,
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
     uint32_t endpoint_id,
     uint32_t connected)
 {
@@ -197,41 +203,80 @@ NTSTATUS AtrisWaveSetEndpointConnected(
         return STATUS_INVALID_PARAMETER;
     }
 
-    WdfSpinLockAcquire(ctx->state_lock);
+    KIRQL old_irql;
+    KeAcquireSpinLock(&ctx->state_lock, &old_irql);
     AtrisWaveEndpointRuntime* ep = &ctx->endpoints[endpoint_id];
     ep->jack_connected = (connected != 0u) ? 1u : 0u;
     if (ep->jack_connected == 0u) {
         ep->active = 0u;
         ep->ring_header.state = ATRISWAVE_VAD_RING_STATE_STOPPED;
+        ep->ring_header.write_frame_idx = 0u;
+        ep->ring_header.read_frame_idx = 0u;
     }
-    WdfSpinLockRelease(ctx->state_lock);
+    KeReleaseSpinLock(&ctx->state_lock, old_irql);
 
     AtrisWaveSignalJackInfoChange(ctx, endpoint_id);
     return STATUS_SUCCESS;
 }
 
-void AtrisWaveSignalJackInfoChange(
-    PATRISWAVE_DEVICE_CONTEXT ctx,
-    uint32_t endpoint_id)
+void AtrisWaveGetEndpointStateMask(
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
+    AtrisWaveVadEndpointStateMask* out_mask)
 {
-    UNREFERENCED_PARAMETER(ctx);
-    UNREFERENCED_PARAMETER(endpoint_id);
-    /*
-     * ACX / PortCls KS integration hook:
-     * When wired to the ACX/KS pin topology, generate KSEVENT_PINCAPS_JACKINFOCHANGE
-     * (via AcxPnpEventGenerateEvent / PcGenerateEventList) so Windows Audio Endpoint
-     * Builder updates KSJACK_DESCRIPTION.IsConnected without PnP child churn.
-     */
+    if (ctx == nullptr || out_mask == nullptr) {
+        return;
+    }
+
+    uint32_t conn_mask = 0u;
+    uint32_t act_mask = 0u;
+
+    KIRQL old_irql;
+    KeAcquireSpinLock(&ctx->state_lock, &old_irql);
+    for (uint32_t i = 0; i < ATRISWAVE_VAD_ENDPOINT_COUNT; ++i) {
+        if (ctx->endpoints[i].jack_connected != 0u) {
+            conn_mask |= (1u << i);
+        }
+        if (ctx->endpoints[i].active != 0u) {
+            act_mask |= (1u << i);
+        }
+    }
+    KeReleaseSpinLock(&ctx->state_lock, old_irql);
+
+    out_mask->connected_mask = conn_mask;
+    out_mask->active_mask = act_mask;
+    out_mask->endpoint_count = ATRISWAVE_VAD_ENDPOINT_COUNT;
+    out_mask->reserved = 0u;
 }
 
-/*
- * DISPATCH_LEVEL-safe zero-DSP WaveRT/ACX cyclic ring transfer:
- * - Zero heap allocations
- * - Zero locks (single-producer/single-consumer ring indices)
- * - Zero DSP math in kernel mode
- */
+void AtrisWaveSignalJackInfoChange(
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
+    uint32_t endpoint_id)
+{
+    if (ctx == nullptr || endpoint_id >= ATRISWAVE_VAD_ENDPOINT_COUNT) {
+        return;
+    }
+
+    IPortEvents* port_events = nullptr;
+    KIRQL old_irql;
+    KeAcquireSpinLock(&ctx->state_lock, &old_irql);
+    port_events = ctx->endpoints[endpoint_id].topo_port_events;
+    KeReleaseSpinLock(&ctx->state_lock, old_irql);
+
+    if (port_events != nullptr) {
+        GUID event_set = KSEVENTSETID_PinCapsChange;
+        const ULONG pin_id = (kEndpointDescriptors[endpoint_id].direction == ATRISWAVE_ENDPOINT_RENDER) ? 1u : 0u;
+        port_events->GenerateEventList(
+            &event_set,
+            KSEVENT_PINCAPS_JACKINFOCHANGE,
+            TRUE,
+            pin_id,
+            FALSE,
+            ULONG(-1));
+    }
+}
+
 uint32_t AtrisWaveRtPushFramesDispatch(
-    PATRISWAVE_DEVICE_CONTEXT ctx,
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
     uint32_t endpoint_id,
     const float* src_pcm,
     uint32_t frames)
@@ -254,7 +299,7 @@ uint32_t AtrisWaveRtPushFramesDispatch(
 }
 
 uint32_t AtrisWaveRtPullFramesDispatch(
-    PATRISWAVE_DEVICE_CONTEXT ctx,
+    PATRISWAVE_ADAPTER_CONTEXT ctx,
     uint32_t endpoint_id,
     float* dst_pcm,
     uint32_t frames)

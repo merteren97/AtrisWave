@@ -1255,13 +1255,50 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public async Task AssignSessionToChannelAsync(AudioSessionInfo session, MixerChannelId channelId)
     {
         ArgumentNullException.ThrowIfNull(session);
+        string processName = string.IsNullOrWhiteSpace(session.AppName) ? session.EffectiveLabel : session.AppName;
+        string channelName = channelId.ToString();
+
+        // Find existing channel matching Game / Chat / Media / Aux, or create one automatically
+        DynamicChannelModel? targetCh = DynamicChannels.FirstOrDefault(
+            c => !c.IsSystem && !c.IsHardwareInput &&
+                 string.Equals(c.Name, channelName, StringComparison.OrdinalIgnoreCase));
+
+        if (targetCh is null)
+        {
+            string color = channelId switch
+            {
+                MixerChannelId.Game => "#A855F7",
+                MixerChannelId.Chat => "#10B981",
+                MixerChannelId.Media => "#F59E0B",
+                _ => "#EC4899",
+            };
+            (bool created, uint newId) = await _pipeClient.CreateChannelAsync(channelName, "app_group", color);
+            if (created)
+            {
+                await RefreshV2MixerStateAsync();
+                targetCh = DynamicChannels.FirstOrDefault(c => c.ChannelId == newId);
+            }
+        }
+
+        if (targetCh is not null)
+        {
+            EnginePipeResponse bindResp = await _pipeClient.BindAppToChannelAsync(processName, targetCh.ChannelId);
+            if (bindResp.Ok)
+            {
+                await RefreshV2MixerStateAsync();
+                await RefreshRoutingRulesAsync();
+                await RefreshSessionsAsync();
+                return;
+            }
+        }
+
         string targetDeviceId = !string.IsNullOrWhiteSpace(session.TargetDeviceId)
             ? session.TargetDeviceId
-            : (OutputBuses.FirstOrDefault(b => b.BusId == "A1")?.DeviceId ?? string.Empty);
+            : (targetCh?.DeviceId ?? string.Empty);
 
         var rule = new RoutingRule
         {
-            ProcessName = string.IsNullOrWhiteSpace(session.AppName) ? session.EffectiveLabel : session.AppName,
+            ProcessName = processName,
             ChannelId = (uint)channelId,
             TargetDeviceId = targetDeviceId,
             LoopbackCapture = session.LoopbackCapture,
@@ -1272,6 +1309,79 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             await RefreshRoutingRulesAsync();
         }
+    }
+
+    [RelayCommand]
+    private async Task EnableVirtualSystemDefaultAsync()
+    {
+        EnginePipeResponse resp = await _pipeClient.SetSystemDefaultVirtualAsync(true);
+        if (resp.Ok)
+        {
+            ClearError();
+            await RefreshDevicesAsync();
+            await RefreshV2MixerStateAsync();
+        }
+        else
+        {
+            SetError(resp.Error ?? "Could not set AtrisWave System as default Windows playback device.");
+        }
+    }
+
+    [RelayCommand]
+    private async Task RestorePhysicalSystemDefaultAsync()
+    {
+        EnginePipeResponse resp = await _pipeClient.SetSystemDefaultVirtualAsync(false);
+        if (resp.Ok)
+        {
+            ClearError();
+            await RefreshDevicesAsync();
+        }
+        else
+        {
+            SetError(resp.Error ?? "Could not restore physical Windows default playback device.");
+        }
+    }
+
+    [RelayCommand]
+    private void InstallVirtualDriver()
+    {
+        try
+        {
+            string? scriptPath = FindDriverInstallScript();
+            if (scriptPath is null)
+            {
+                SetError("Driver install script (driver\\scripts\\build-and-testsign.ps1) not found.");
+                return;
+            }
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-ExecutionPolicy Bypass -NoExit -File \"{scriptPath}\" -Install",
+                UseShellExecute = true,
+                Verb = "runas",
+            };
+            System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
+    }
+
+    private static string? FindDriverInstallScript()
+    {
+        DirectoryInfo? dir = new(AppContext.BaseDirectory);
+        for (int i = 0; i < 6 && dir is not null; i++)
+        {
+            string candidate = Path.Combine(dir.FullName, "driver", "scripts", "build-and-testsign.ps1");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+            dir = dir.Parent;
+        }
+        return null;
     }
 
     [RelayCommand]
@@ -1555,7 +1665,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return plus >= 0 ? info[..plus] : info;
         }
 
-        return "0.1.2";
+        return "0.1.3";
     }
 
     [RelayCommand]

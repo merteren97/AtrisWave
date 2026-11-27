@@ -221,6 +221,11 @@
     <sys:String x:Key="Driver_StatusActive">AtrisWaveVAD.sys Etkin (Sıfır Kopyalı Çekirdek Sanal Ses)</sys:String>
     <sys:String x:Key="Driver_StatusBridge">Faz 1 Köprü Modu (WASAPI / VB-Cable / Süreç Loopback)</sys:String>
     <sys:String x:Key="Driver_RefreshStatus">Sürücüyü Kontrol Et</sys:String>
+    <sys:String x:Key="Driver_InstallBtn">Sanal Sürücüyü Kur (Test-Sign)</sys:String>
+    <sys:String x:Key="Driver_SetSystemDefault">AtrisWave System'i Varsayılan Yap</sys:String>
+    <sys:String x:Key="Driver_RestoreDefault">Fiziksel Varsayılanı Geri Yükle</sys:String>
+    <sys:String x:Key="Driver_DiscordObsGuide">Yönlendirme İpucu: Windows Çıkış → AtrisWave System · Discord Mikrofon → AtrisWave Mic (DSP'li) · Discord Çıkış → AtrisWave Chat · OBS Yayın Sesi → AtrisWave Stream Mix.</sys:String>
+    <sys:String x:Key="Drawer_VirtualSource">Sanal Ses Giriş Aygıtı</sys:String>
     <sys:String x:Key="Driver_DropHint">Kalıcı yönlendirme kuralı kaydetmek için bir uygulama satırını sanal veri yolu düğmesine sürükleyin (veya seçip tıklayın):</sys:String>
     <sys:String x:Key="Rules_Title">Kayıtlı Kalıcı Yönlendirme Kuralları</sys:String>
     <sys:String x:Key="Rules_ApplyAll">Tüm Kuralları Uygula</sys:String>

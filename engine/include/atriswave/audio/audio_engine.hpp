@@ -97,6 +97,7 @@ public:
     [[nodiscard]] V2CommandResult unbind_app_from_channel(const std::string& process_name,
                                                           uint32_t channel_id) override;
     [[nodiscard]] V2CommandResult auto_setup_defaults() override;
+    [[nodiscard]] V2CommandResult set_system_default_virtual(bool enabled) override;
 
     // v2.1 Soundboard & Spectrum Analyzer
     [[nodiscard]] SoundboardPlayResult play_soundboard(const std::string& path,
@@ -130,6 +131,7 @@ private:
         float last_in_l{0.0f};
         float last_in_r{0.0f};
         std::atomic<bool> stream_active{false};
+        std::atomic<int32_t> vad_endpoint_id{-1};
         audio::WasapiStream capture_stream;
         audio::ProcessLoopbackCapture loopback_capture;
     };
@@ -150,6 +152,10 @@ private:
     };
 
     void init_default_slots();
+    void setup_vad_bridge_if_installed();
+    [[nodiscard]] int32_t allocate_vad_render_slot_locked(const std::string& channel_name) const;
+    [[nodiscard]] static std::string find_vad_mmdevice_id(uint32_t endpoint_id);
+    static void route_process_instances_to_device(const std::string& process_name, const std::string& target_device_id);
     void master_clock_loop();
     void process_master_tick(size_t frames) noexcept;
     void wait_for_master_tick_quiesce() noexcept;
@@ -216,6 +222,10 @@ private:
     MicDspConfig current_mic_cfg_{};
     audio::RoutingRulesStore routing_rules_;
     audio::FailsafeWatchdog failsafe_;
+    audio::DriverBridgeClient vad_client_;
+    std::atomic<bool> vad_b1_active_{false};
+    std::atomic<bool> vad_b2_active_{false};
+    std::array<float, kMasterTickFrames * 2> vad_pcm_scratch_{};
 
     std::atomic<uint32_t> engine_state_{ATRISWAVE_ENGINE_STATE_STOPPED};
     std::atomic<uint32_t> sample_rate_{48000};

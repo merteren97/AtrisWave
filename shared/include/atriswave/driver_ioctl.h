@@ -2,6 +2,15 @@
 
 #ifdef _KERNEL_MODE
 #include <ntddk.h>
+#include <stddef.h>
+typedef unsigned char      uint8_t;
+typedef short              int16_t;
+typedef unsigned short     uint16_t;
+typedef unsigned int       uint32_t;
+typedef unsigned long long uint64_t;
+#ifndef UINT64_MAX
+#define UINT64_MAX 0xFFFFFFFFFFFFFFFFULL
+#endif
 #else
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -11,14 +20,13 @@
 #endif
 #include <windows.h>
 #include <winioctl.h>
-#endif
-
 #ifdef __cplusplus
 #include <cstddef>
 #include <cstdint>
 #else
 #include <stddef.h>
 #include <stdint.h>
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -50,8 +58,10 @@ EXTERN_C __declspec(selectany) const GUID GUID_DEVINTERFACE_ATRISWAVE_VAD = {
 #define ATRISWAVE_VAD_MAX_RING_FRAMES 65536u
 
 #define ATRISWAVE_VAD_VERSION_MAJOR   0u
-#define ATRISWAVE_VAD_VERSION_MINOR   1u
+#define ATRISWAVE_VAD_VERSION_MINOR   2u
 #define ATRISWAVE_VAD_VERSION_PATCH   0u
+
+#define ATRISWAVE_VAD_MAX_PCM_CHUNK_FRAMES 2048u
 
 #define IOCTL_ATRISWAVE_GET_VERSION \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_READ_ACCESS)
@@ -67,6 +77,15 @@ EXTERN_C __declspec(selectany) const GUID GUID_DEVINTERFACE_ATRISWAVE_VAD = {
 
 #define IOCTL_ATRISWAVE_SET_ENDPOINT_CONNECTED \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+
+#define IOCTL_ATRISWAVE_WRITE_CAPTURE_PCM \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x805, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+
+#define IOCTL_ATRISWAVE_READ_RENDER_PCM \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x806, METHOD_BUFFERED, FILE_READ_ACCESS | FILE_WRITE_ACCESS)
+
+#define IOCTL_ATRISWAVE_GET_ENDPOINT_STATES \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x807, METHOD_BUFFERED, FILE_READ_ACCESS)
 
 #ifndef __cplusplus
 typedef enum AtrisWaveVadEndpointId {
@@ -157,6 +176,34 @@ typedef struct AtrisWaveVadSetConnectedRequest {
     uint32_t connected;
 } AtrisWaveVadSetConnectedRequest;
 
+typedef struct AtrisWaveVadPcmWriteHeader {
+    uint32_t endpoint_id;
+    uint32_t frames;
+    uint32_t channels;
+    uint32_t reserved;
+    /* Followed immediately by frames * channels float32 samples */
+} AtrisWaveVadPcmWriteHeader;
+
+typedef struct AtrisWaveVadPcmReadRequest {
+    uint32_t endpoint_id;
+    uint32_t max_frames;
+} AtrisWaveVadPcmReadRequest;
+
+typedef struct AtrisWaveVadPcmReadHeader {
+    uint32_t endpoint_id;
+    uint32_t frames_read;
+    uint32_t channels;
+    uint32_t available_frames;
+    /* Followed immediately by frames_read * channels float32 samples */
+} AtrisWaveVadPcmReadHeader;
+
+typedef struct AtrisWaveVadEndpointStateMask {
+    uint32_t connected_mask;
+    uint32_t active_mask;
+    uint32_t endpoint_count;
+    uint32_t reserved;
+} AtrisWaveVadEndpointStateMask;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -164,9 +211,12 @@ typedef struct AtrisWaveVadSetConnectedRequest {
 
 enum class AtrisWaveVadEndpointId : uint32_t {
     System = 0,
-    Game = 0,
     MicOut = 1,
     StreamMix = 2,
+    Game = 3,
+    Chat = 4,
+    Media = 5,
+    Aux = 6,
     Ch4 = 3,
     Ch5 = 4,
     Ch6 = 5,
@@ -217,4 +267,12 @@ static_assert(sizeof(AtrisWaveVadRingMapInfo) == 32,
               "AtrisWaveVadRingMapInfo must be 32 bytes");
 static_assert(sizeof(AtrisWaveVadSetConnectedRequest) == 8,
               "AtrisWaveVadSetConnectedRequest must be 8 bytes");
+static_assert(sizeof(AtrisWaveVadPcmWriteHeader) == 16,
+              "AtrisWaveVadPcmWriteHeader must be 16 bytes");
+static_assert(sizeof(AtrisWaveVadPcmReadRequest) == 8,
+              "AtrisWaveVadPcmReadRequest must be 8 bytes");
+static_assert(sizeof(AtrisWaveVadPcmReadHeader) == 16,
+              "AtrisWaveVadPcmReadHeader must be 16 bytes");
+static_assert(sizeof(AtrisWaveVadEndpointStateMask) == 16,
+              "AtrisWaveVadEndpointStateMask must be 16 bytes");
 #endif

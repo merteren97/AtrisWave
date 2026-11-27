@@ -1,7 +1,7 @@
 ;
 ; AtrisWaveVAD.inf
-; AtrisWave Virtual Audio Driver (KMDF 1.33 / ACX + WaveRT)
-; 16-Slot Pre-Provisioned Dynamic Pool for Windows 10/11 (x64 & ARM64)
+; AtrisWave Virtual Audio Driver (PortCls WaveRT — 16-Slot Dynamic Pool)
+; Windows 10/11 (x64 & ARM64)
 ;
 
 [Version]
@@ -10,11 +10,11 @@ Class       = MEDIA
 ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider    = %ManufacturerName%
 CatalogFile = AtrisWaveVAD.cat
-DriverVer   = 11/24/2026,0.2.0.0
+DriverVer   = 11/27/2026,0.2.0.0
 PnpLockdown = 1
 
 [DestinationDirs]
-DefaultDestDir = 13 ; Driver Store (run-from-DriverStore compliant)
+DefaultDestDir = 13 ; Driver Store
 
 [SourceDisksNames]
 1 = %DiskName%,,,""
@@ -47,176 +47,205 @@ AddReg    = AtrisWaveVAD_AddReg
 AtrisWaveVAD.sys
 
 [AtrisWaveVAD_AddReg]
-HKR,,FriendlyName,,%DeviceDesc%
-HKR,Parameters,EndpointCount,0x00010001,16
-HKR,Parameters\Endpoints\0,FriendlyName,,%EndpointSystem%
-HKR,Parameters\Endpoints\0,Direction,0x00010001,0 ; Render (Always Connected)
-HKR,Parameters\Endpoints\1,FriendlyName,,%EndpointMic%
-HKR,Parameters\Endpoints\1,Direction,0x00010001,1 ; Capture (Mic Out)
-HKR,Parameters\Endpoints\2,FriendlyName,,%EndpointStreamMix%
-HKR,Parameters\Endpoints\2,Direction,0x00010001,1 ; Capture (Stream Mix)
-HKR,Parameters\Endpoints\3,FriendlyName,,%EndpointCh4%
-HKR,Parameters\Endpoints\3,Direction,0x00010001,0 ; Render (Dynamic Pool)
-HKR,Parameters\Endpoints\4,FriendlyName,,%EndpointCh5%
-HKR,Parameters\Endpoints\4,Direction,0x00010001,0
-HKR,Parameters\Endpoints\5,FriendlyName,,%EndpointCh6%
-HKR,Parameters\Endpoints\5,Direction,0x00010001,0
-HKR,Parameters\Endpoints\6,FriendlyName,,%EndpointCh7%
-HKR,Parameters\Endpoints\6,Direction,0x00010001,0
-HKR,Parameters\Endpoints\7,FriendlyName,,%EndpointCh8%
-HKR,Parameters\Endpoints\7,Direction,0x00010001,0
-HKR,Parameters\Endpoints\8,FriendlyName,,%EndpointCh9%
-HKR,Parameters\Endpoints\8,Direction,0x00010001,0
-HKR,Parameters\Endpoints\9,FriendlyName,,%EndpointCh10%
-HKR,Parameters\Endpoints\9,Direction,0x00010001,0
-HKR,Parameters\Endpoints\10,FriendlyName,,%EndpointCh11%
-HKR,Parameters\Endpoints\10,Direction,0x00010001,0
-HKR,Parameters\Endpoints\11,FriendlyName,,%EndpointCh12%
-HKR,Parameters\Endpoints\11,Direction,0x00010001,0
-HKR,Parameters\Endpoints\12,FriendlyName,,%EndpointCh13%
-HKR,Parameters\Endpoints\12,Direction,0x00010001,0
-HKR,Parameters\Endpoints\13,FriendlyName,,%EndpointCh14%
-HKR,Parameters\Endpoints\13,Direction,0x00010001,0
-HKR,Parameters\Endpoints\14,FriendlyName,,%EndpointCh15%
-HKR,Parameters\Endpoints\14,Direction,0x00010001,0
-HKR,Parameters\Endpoints\15,FriendlyName,,%EndpointCh16%
-HKR,Parameters\Endpoints\15,Direction,0x00010001,0
+HKR,,AssociatedFilters,,"wdmaud,swmidi,redbook"
+HKR,,Driver,,AtrisWaveVAD.sys
+HKR,Drivers,SubClasses,,"wave,mixer"
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\wave\wdmaud.drv,Description,,%DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%DeviceDesc%
 
 [AtrisWaveVAD_Device.NT.Interfaces]
-; Control device interface GUID_DEVINTERFACE_ATRISWAVE_VAD
-AddInterface = {3713CB20-17E2-4673-8615-F26D528D8255}, "AtrisWaveVADControl", AtrisWaveVAD_Interface_Control
-; KS Audio Topology & WaveRT categories (16 Pooled Endpoints)
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveSystem",    AtrisWaveVAD_Interface_System
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveSystem",    AtrisWaveVAD_Interface_System
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveMic",       AtrisWaveVAD_Interface_Mic
-AddInterface = %KSCATEGORY_CAPTURE%, "AtrisWaveMic",       AtrisWaveVAD_Interface_Mic
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveStreamMix", AtrisWaveVAD_Interface_StreamMix
-AddInterface = %KSCATEGORY_CAPTURE%, "AtrisWaveStreamMix", AtrisWaveVAD_Interface_StreamMix
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh4",       AtrisWaveVAD_Interface_Ch4
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh4",       AtrisWaveVAD_Interface_Ch4
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh5",       AtrisWaveVAD_Interface_Ch5
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh5",       AtrisWaveVAD_Interface_Ch5
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh6",       AtrisWaveVAD_Interface_Ch6
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh6",       AtrisWaveVAD_Interface_Ch6
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh7",       AtrisWaveVAD_Interface_Ch7
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh7",       AtrisWaveVAD_Interface_Ch7
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh8",       AtrisWaveVAD_Interface_Ch8
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh8",       AtrisWaveVAD_Interface_Ch8
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh9",       AtrisWaveVAD_Interface_Ch9
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh9",       AtrisWaveVAD_Interface_Ch9
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh10",      AtrisWaveVAD_Interface_Ch10
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh10",      AtrisWaveVAD_Interface_Ch10
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh11",      AtrisWaveVAD_Interface_Ch11
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh11",      AtrisWaveVAD_Interface_Ch11
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh12",      AtrisWaveVAD_Interface_Ch12
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh12",      AtrisWaveVAD_Interface_Ch12
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh13",      AtrisWaveVAD_Interface_Ch13
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh13",      AtrisWaveVAD_Interface_Ch13
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh14",      AtrisWaveVAD_Interface_Ch14
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh14",      AtrisWaveVAD_Interface_Ch14
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh15",      AtrisWaveVAD_Interface_Ch15
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh15",      AtrisWaveVAD_Interface_Ch15
-AddInterface = %KSCATEGORY_AUDIO%,   "AtrisWaveCh16",      AtrisWaveVAD_Interface_Ch16
-AddInterface = %KSCATEGORY_RENDER%,  "AtrisWaveCh16",      AtrisWaveVAD_Interface_Ch16
+; 16 Paired WaveRT + Topology Interfaces (Friendly Names shown in Windows Sound / Discord / OBS)
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveSystem",    IF_System
+AddInterface = %KSCATEGORY_RENDER%,   "WaveSystem",    IF_System
+AddInterface = %KSCATEGORY_REALTIME%, "WaveSystem",    IF_System
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoSystem",    IF_System
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoSystem",    IF_System
 
-[AtrisWaveVAD_Interface_Control]
-AddReg = AtrisWaveVAD_Interface_Control_AddReg
-[AtrisWaveVAD_Interface_Control_AddReg]
-HKR,,FriendlyName,,%DeviceDesc%
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveMic",       IF_Mic
+AddInterface = %KSCATEGORY_CAPTURE%,  "WaveMic",       IF_Mic
+AddInterface = %KSCATEGORY_REALTIME%, "WaveMic",       IF_Mic
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoMic",       IF_Mic
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoMic",       IF_Mic
 
-[AtrisWaveVAD_Interface_System]
-AddReg = AtrisWaveVAD_Interface_System_AddReg
-[AtrisWaveVAD_Interface_System_AddReg]
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveStreamMix", IF_StreamMix
+AddInterface = %KSCATEGORY_CAPTURE%,  "WaveStreamMix", IF_StreamMix
+AddInterface = %KSCATEGORY_REALTIME%, "WaveStreamMix", IF_StreamMix
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoStreamMix", IF_StreamMix
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoStreamMix", IF_StreamMix
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveGame",      IF_Game
+AddInterface = %KSCATEGORY_RENDER%,   "WaveGame",      IF_Game
+AddInterface = %KSCATEGORY_REALTIME%, "WaveGame",      IF_Game
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoGame",      IF_Game
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoGame",      IF_Game
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveChat",      IF_Chat
+AddInterface = %KSCATEGORY_RENDER%,   "WaveChat",      IF_Chat
+AddInterface = %KSCATEGORY_REALTIME%, "WaveChat",      IF_Chat
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoChat",      IF_Chat
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoChat",      IF_Chat
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveMedia",     IF_Media
+AddInterface = %KSCATEGORY_RENDER%,   "WaveMedia",     IF_Media
+AddInterface = %KSCATEGORY_REALTIME%, "WaveMedia",     IF_Media
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoMedia",     IF_Media
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoMedia",     IF_Media
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveAux",       IF_Aux
+AddInterface = %KSCATEGORY_RENDER%,   "WaveAux",       IF_Aux
+AddInterface = %KSCATEGORY_REALTIME%, "WaveAux",       IF_Aux
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoAux",       IF_Aux
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoAux",       IF_Aux
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh8",       IF_Ch8
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh8",       IF_Ch8
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh8",       IF_Ch8
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh8",       IF_Ch8
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh8",       IF_Ch8
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh9",       IF_Ch9
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh9",       IF_Ch9
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh9",       IF_Ch9
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh9",       IF_Ch9
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh9",       IF_Ch9
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh10",      IF_Ch10
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh10",      IF_Ch10
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh10",      IF_Ch10
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh10",      IF_Ch10
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh10",      IF_Ch10
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh11",      IF_Ch11
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh11",      IF_Ch11
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh11",      IF_Ch11
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh11",      IF_Ch11
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh11",      IF_Ch11
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh12",      IF_Ch12
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh12",      IF_Ch12
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh12",      IF_Ch12
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh12",      IF_Ch12
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh12",      IF_Ch12
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh13",      IF_Ch13
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh13",      IF_Ch13
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh13",      IF_Ch13
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh13",      IF_Ch13
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh13",      IF_Ch13
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh14",      IF_Ch14
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh14",      IF_Ch14
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh14",      IF_Ch14
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh14",      IF_Ch14
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh14",      IF_Ch14
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh15",      IF_Ch15
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh15",      IF_Ch15
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh15",      IF_Ch15
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh15",      IF_Ch15
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh15",      IF_Ch15
+
+AddInterface = %KSCATEGORY_AUDIO%,    "WaveCh16",      IF_Ch16
+AddInterface = %KSCATEGORY_RENDER%,   "WaveCh16",      IF_Ch16
+AddInterface = %KSCATEGORY_REALTIME%, "WaveCh16",      IF_Ch16
+AddInterface = %KSCATEGORY_AUDIO%,    "TopoCh16",      IF_Ch16
+AddInterface = %KSCATEGORY_TOPOLOGY%, "TopoCh16",      IF_Ch16
+
+[IF_System]
+AddReg = IF_System_Reg
+[IF_System_Reg]
 HKR,,FriendlyName,,%EndpointSystem%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Mic]
-AddReg = AtrisWaveVAD_Interface_Mic_AddReg
-[AtrisWaveVAD_Interface_Mic_AddReg]
+[IF_Mic]
+AddReg = IF_Mic_Reg
+[IF_Mic_Reg]
 HKR,,FriendlyName,,%EndpointMic%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_StreamMix]
-AddReg = AtrisWaveVAD_Interface_StreamMix_AddReg
-[AtrisWaveVAD_Interface_StreamMix_AddReg]
+[IF_StreamMix]
+AddReg = IF_StreamMix_Reg
+[IF_StreamMix_Reg]
 HKR,,FriendlyName,,%EndpointStreamMix%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch4]
-AddReg = AtrisWaveVAD_Interface_Ch4_AddReg
-[AtrisWaveVAD_Interface_Ch4_AddReg]
-HKR,,FriendlyName,,%EndpointCh4%
+[IF_Game]
+AddReg = IF_Game_Reg
+[IF_Game_Reg]
+HKR,,FriendlyName,,%EndpointGame%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch5]
-AddReg = AtrisWaveVAD_Interface_Ch5_AddReg
-[AtrisWaveVAD_Interface_Ch5_AddReg]
-HKR,,FriendlyName,,%EndpointCh5%
+[IF_Chat]
+AddReg = IF_Chat_Reg
+[IF_Chat_Reg]
+HKR,,FriendlyName,,%EndpointChat%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch6]
-AddReg = AtrisWaveVAD_Interface_Ch6_AddReg
-[AtrisWaveVAD_Interface_Ch6_AddReg]
-HKR,,FriendlyName,,%EndpointCh6%
+[IF_Media]
+AddReg = IF_Media_Reg
+[IF_Media_Reg]
+HKR,,FriendlyName,,%EndpointMedia%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch7]
-AddReg = AtrisWaveVAD_Interface_Ch7_AddReg
-[AtrisWaveVAD_Interface_Ch7_AddReg]
-HKR,,FriendlyName,,%EndpointCh7%
+[IF_Aux]
+AddReg = IF_Aux_Reg
+[IF_Aux_Reg]
+HKR,,FriendlyName,,%EndpointAux%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch8]
-AddReg = AtrisWaveVAD_Interface_Ch8_AddReg
-[AtrisWaveVAD_Interface_Ch8_AddReg]
+[IF_Ch8]
+AddReg = IF_Ch8_Reg
+[IF_Ch8_Reg]
 HKR,,FriendlyName,,%EndpointCh8%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch9]
-AddReg = AtrisWaveVAD_Interface_Ch9_AddReg
-[AtrisWaveVAD_Interface_Ch9_AddReg]
+[IF_Ch9]
+AddReg = IF_Ch9_Reg
+[IF_Ch9_Reg]
 HKR,,FriendlyName,,%EndpointCh9%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch10]
-AddReg = AtrisWaveVAD_Interface_Ch10_AddReg
-[AtrisWaveVAD_Interface_Ch10_AddReg]
+[IF_Ch10]
+AddReg = IF_Ch10_Reg
+[IF_Ch10_Reg]
 HKR,,FriendlyName,,%EndpointCh10%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch11]
-AddReg = AtrisWaveVAD_Interface_Ch11_AddReg
-[AtrisWaveVAD_Interface_Ch11_AddReg]
+[IF_Ch11]
+AddReg = IF_Ch11_Reg
+[IF_Ch11_Reg]
 HKR,,FriendlyName,,%EndpointCh11%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch12]
-AddReg = AtrisWaveVAD_Interface_Ch12_AddReg
-[AtrisWaveVAD_Interface_Ch12_AddReg]
+[IF_Ch12]
+AddReg = IF_Ch12_Reg
+[IF_Ch12_Reg]
 HKR,,FriendlyName,,%EndpointCh12%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch13]
-AddReg = AtrisWaveVAD_Interface_Ch13_AddReg
-[AtrisWaveVAD_Interface_Ch13_AddReg]
+[IF_Ch13]
+AddReg = IF_Ch13_Reg
+[IF_Ch13_Reg]
 HKR,,FriendlyName,,%EndpointCh13%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch14]
-AddReg = AtrisWaveVAD_Interface_Ch14_AddReg
-[AtrisWaveVAD_Interface_Ch14_AddReg]
+[IF_Ch14]
+AddReg = IF_Ch14_Reg
+[IF_Ch14_Reg]
 HKR,,FriendlyName,,%EndpointCh14%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch15]
-AddReg = AtrisWaveVAD_Interface_Ch15_AddReg
-[AtrisWaveVAD_Interface_Ch15_AddReg]
+[IF_Ch15]
+AddReg = IF_Ch15_Reg
+[IF_Ch15_Reg]
 HKR,,FriendlyName,,%EndpointCh15%
 HKR,,CLSID,,%Proxy.CLSID%
 
-[AtrisWaveVAD_Interface_Ch16]
-AddReg = AtrisWaveVAD_Interface_Ch16_AddReg
-[AtrisWaveVAD_Interface_Ch16_AddReg]
+[IF_Ch16]
+AddReg = IF_Ch16_Reg
+[IF_Ch16_Reg]
 HKR,,FriendlyName,,%EndpointCh16%
 HKR,,CLSID,,%Proxy.CLSID%
 
@@ -230,35 +259,31 @@ StartType      = 3 ; SERVICE_DEMAND_START
 ErrorControl   = 1 ; SERVICE_ERROR_NORMAL
 ServiceBinary  = %13%\AtrisWaveVAD.sys
 
-[AtrisWaveVAD_Device.NT.Wdf]
-KmdfService = AtrisWaveVAD, AtrisWaveVAD_wdfsect
-
-[AtrisWaveVAD_wdfsect]
-KmdfLibraryVersion = 1.33
-
 [Strings]
-ManufacturerName  = "MCorp / AtrisWave"
-DiskName          = "AtrisWave Virtual Audio Driver Installation Disk"
-DeviceDesc        = "AtrisWave Virtual Audio Device"
-ServiceDesc       = "AtrisWave Virtual Audio Driver Service"
-Proxy.CLSID       = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
-KSCATEGORY_AUDIO  = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
-KSCATEGORY_RENDER = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
-KSCATEGORY_CAPTURE= "{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+ManufacturerName    = "MCorp / AtrisWave"
+DiskName            = "AtrisWave Virtual Audio Driver Installation Disk"
+DeviceDesc          = "AtrisWave Virtual Audio Device"
+ServiceDesc         = "AtrisWave Virtual Audio Driver Service"
+Proxy.CLSID         = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO    = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER   = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_CAPTURE  = "{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_TOPOLOGY = "{DDA54A40-1E4C-11D1-A050-405705C10000}"
+KSCATEGORY_REALTIME = "{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
 
-EndpointSystem    = "AtrisWave System"
-EndpointMic       = "AtrisWave Mic"
-EndpointStreamMix = "AtrisWave Stream Mix"
-EndpointCh4       = "AtrisWave Ch 4"
-EndpointCh5       = "AtrisWave Ch 5"
-EndpointCh6       = "AtrisWave Ch 6"
-EndpointCh7       = "AtrisWave Ch 7"
-EndpointCh8       = "AtrisWave Ch 8"
-EndpointCh9       = "AtrisWave Ch 9"
-EndpointCh10      = "AtrisWave Ch 10"
-EndpointCh11      = "AtrisWave Ch 11"
-EndpointCh12      = "AtrisWave Ch 12"
-EndpointCh13      = "AtrisWave Ch 13"
-EndpointCh14      = "AtrisWave Ch 14"
-EndpointCh15      = "AtrisWave Ch 15"
-EndpointCh16      = "AtrisWave Ch 16"
+EndpointSystem      = "AtrisWave System"
+EndpointMic         = "AtrisWave Mic"
+EndpointStreamMix   = "AtrisWave Stream Mix"
+EndpointGame        = "AtrisWave Game"
+EndpointChat        = "AtrisWave Chat"
+EndpointMedia       = "AtrisWave Media"
+EndpointAux         = "AtrisWave Aux"
+EndpointCh8         = "AtrisWave Ch 8"
+EndpointCh9         = "AtrisWave Ch 9"
+EndpointCh10        = "AtrisWave Ch 10"
+EndpointCh11        = "AtrisWave Ch 11"
+EndpointCh12        = "AtrisWave Ch 12"
+EndpointCh13        = "AtrisWave Ch 13"
+EndpointCh14        = "AtrisWave Ch 14"
+EndpointCh15        = "AtrisWave Ch 15"
+EndpointCh16        = "AtrisWave Ch 16"

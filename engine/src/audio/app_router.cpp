@@ -92,84 +92,105 @@ std::vector<AudioSessionInfo> AppRouter::list_sessions() {
         return sessions;
     }
 
-    ComPtr<IMMDevice> default_render;
-    if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, default_render.put())) ||
-        !default_render) {
+    ComPtr<IMMDeviceCollection> collection;
+    if (FAILED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, collection.put())) ||
+        !collection) {
         return sessions;
     }
 
-    ComPtr<IAudioSessionManager2> session_mgr;
-    if (FAILED(default_render->Activate(
-            __uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, session_mgr.put_void())) ||
-        !session_mgr) {
+    UINT dev_count = 0;
+    if (FAILED(collection->GetCount(&dev_count)) || dev_count == 0) {
         return sessions;
     }
 
-    ComPtr<IAudioSessionEnumerator> session_enum;
-    if (FAILED(session_mgr->GetSessionEnumerator(session_enum.put())) || !session_enum) {
-        return sessions;
-    }
-
-    int count = 0;
-    if (FAILED(session_enum->GetCount(&count)) || count <= 0) {
-        return sessions;
-    }
-
-    for (int i = 0; i < count; ++i) {
-        ComPtr<IAudioSessionControl> ctrl;
-        if (FAILED(session_enum->GetSession(i, ctrl.put())) || !ctrl) {
+    for (UINT dev_idx = 0; dev_idx < dev_count; ++dev_idx) {
+        ComPtr<IMMDevice> render_dev;
+        if (FAILED(collection->Item(dev_idx, render_dev.put())) || !render_dev) {
             continue;
         }
 
-        AudioSessionState state = AudioSessionStateExpired;
-        if (FAILED(ctrl->GetState(&state)) || state == AudioSessionStateExpired) {
+        ComPtr<IAudioSessionManager2> session_mgr;
+        if (FAILED(render_dev->Activate(
+                __uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, session_mgr.put_void())) ||
+            !session_mgr) {
             continue;
         }
 
-        ComPtr<IAudioSessionControl2> ctrl2;
-        if (FAILED(ctrl.as(ctrl2)) || !ctrl2) {
+        ComPtr<IAudioSessionEnumerator> session_enum;
+        if (FAILED(session_mgr->GetSessionEnumerator(session_enum.put())) || !session_enum) {
             continue;
         }
 
-        DWORD pid = 0;
-        if (FAILED(ctrl2->GetProcessId(&pid))) {
+        int count = 0;
+        if (FAILED(session_enum->GetCount(&count)) || count <= 0) {
             continue;
         }
 
-        AudioSessionInfo info{};
-        info.pid = static_cast<uint32_t>(pid);
-        info.process_name = query_process_exe_name(pid);
-
-        LPWSTR raw_display = nullptr;
-        if (SUCCEEDED(ctrl->GetDisplayName(&raw_display)) && raw_display != nullptr) {
-            info.display_name = wide_to_utf8(raw_display);
-            CoTaskMemFree(raw_display);
-        }
-        if (info.display_name.empty()) {
-            info.display_name = info.process_name;
-        }
-
-        ComPtr<ISimpleAudioVolume> simple_vol;
-        if (SUCCEEDED(ctrl.as(simple_vol)) && simple_vol) {
-            float vol = 1.0f;
-            BOOL muted = FALSE;
-            if (SUCCEEDED(simple_vol->GetMasterVolume(&vol))) {
-                info.volume = vol;
+        for (int i = 0; i < count; ++i) {
+            ComPtr<IAudioSessionControl> ctrl;
+            if (FAILED(session_enum->GetSession(i, ctrl.put())) || !ctrl) {
+                continue;
             }
-            if (SUCCEEDED(simple_vol->GetMute(&muted))) {
-                info.muted = (muted != FALSE);
+
+            AudioSessionState state = AudioSessionStateExpired;
+            if (FAILED(ctrl->GetState(&state)) || state == AudioSessionStateExpired) {
+                continue;
+            }
+
+            ComPtr<IAudioSessionControl2> ctrl2;
+            if (FAILED(ctrl.as(ctrl2)) || !ctrl2) {
+                continue;
+            }
+
+            DWORD pid = 0;
+            if (FAILED(ctrl2->GetProcessId(&pid))) {
+                continue;
+            }
+
+            AudioSessionInfo info{};
+            info.pid = static_cast<uint32_t>(pid);
+            info.process_name = query_process_exe_name(pid);
+
+            LPWSTR raw_display = nullptr;
+            if (SUCCEEDED(ctrl->GetDisplayName(&raw_display)) && raw_display != nullptr) {
+                info.display_name = wide_to_utf8(raw_display);
+                CoTaskMemFree(raw_display);
+            }
+            if (info.display_name.empty()) {
+                info.display_name = info.process_name;
+            }
+
+            ComPtr<ISimpleAudioVolume> simple_vol;
+            if (SUCCEEDED(ctrl.as(simple_vol)) && simple_vol) {
+                float vol = 1.0f;
+                BOOL muted = FALSE;
+                if (SUCCEEDED(simple_vol->GetMasterVolume(&vol))) {
+                    info.volume = vol;
+                }
+                if (SUCCEEDED(simple_vol->GetMute(&muted))) {
+                    info.muted = (muted != FALSE);
+                }
+            }
+
+            ComPtr<IAudioMeterInformation> meter;
+            if (SUCCEEDED(ctrl.as(meter)) && meter) {
+                float peak = 0.0f;
+                if (SUCCEEDED(meter->GetPeakValue(&peak))) {
+                    info.peak = peak;
+                }
+            }
+
+            auto existing = std::find_if(sessions.begin(), sessions.end(), [&](const AudioSessionInfo& s) {
+                return s.pid == info.pid;
+            });
+            if (existing != sessions.end()) {
+                if (info.peak > existing->peak) {
+                    *existing = std::move(info);
+                }
+            } else {
+                sessions.push_back(std::move(info));
             }
         }
-
-        ComPtr<IAudioMeterInformation> meter;
-        if (SUCCEEDED(ctrl.as(meter)) && meter) {
-            float peak = 0.0f;
-            if (SUCCEEDED(meter->GetPeakValue(&peak))) {
-                info.peak = peak;
-            }
-        }
-
-        sessions.push_back(std::move(info));
     }
 
     return sessions;

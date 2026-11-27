@@ -3,6 +3,7 @@
 #include <atriswave/driver_ioctl.h>
 #include <atriswave/ring_buffer_validate.h>
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -37,6 +38,41 @@ public:
 private:
     AtrisWaveVadRingHeader* header_{nullptr};
     float* pcm_buffer_{nullptr};
+};
+
+/// Persistent Win32 IOCTL client to `\\.\AtrisWaveVAD` for real-time stereo PCM I/O
+/// and dynamic virtual jack presence management.
+class DriverBridgeClient final {
+public:
+    DriverBridgeClient() noexcept = default;
+    ~DriverBridgeClient();
+
+    DriverBridgeClient(const DriverBridgeClient&) = delete;
+    DriverBridgeClient& operator=(const DriverBridgeClient&) = delete;
+
+    [[nodiscard]] bool open() noexcept;
+    void close() noexcept;
+    [[nodiscard]] bool is_open() const noexcept {
+        return open_.load(std::memory_order_acquire);
+    }
+
+    [[nodiscard]] bool set_endpoint_connected(uint32_t endpoint_id, bool connected) noexcept;
+    [[nodiscard]] bool get_endpoint_states(AtrisWaveVadEndpointStateMask& out_mask) noexcept;
+
+    /// Zero-allocation RT-safe IOCTL write into virtual capture endpoint ring (B1 Mic / B2 Stream Mix).
+    [[nodiscard]] bool write_capture_pcm(uint32_t endpoint_id,
+                                         const float* interleaved_stereo,
+                                         uint32_t frames) noexcept;
+
+    /// Zero-allocation RT-safe IOCTL read from virtual render endpoint ring (System / Game / Chat / ...).
+    [[nodiscard]] bool read_render_pcm(uint32_t endpoint_id,
+                                       float* interleaved_stereo,
+                                       uint32_t max_frames,
+                                       uint32_t& out_frames) noexcept;
+
+private:
+    void* handle_{nullptr};
+    std::atomic<bool> open_{false};
 };
 
 /// User-mode Win32 bridge to `\\.\AtrisWaveVAD`.

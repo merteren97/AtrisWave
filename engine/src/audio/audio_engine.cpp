@@ -289,6 +289,7 @@ bool AudioEngine::start(void* shutdown_event, bool headless_test) {
     if (!headless_test) {
         (void)failsafe_.arm_current_system_defaults();
         launch_watchdog_if_present();
+        setup_vad_bridge_if_installed();
         if (!load_persistent_state()) {
             (void)auto_setup_defaults();
         }
@@ -320,6 +321,7 @@ void AudioEngine::stop() {
         std::lock_guard lock(state_mutex_);
         for (auto& ch : channels_) {
             ch.stream_active.store(false, std::memory_order_release);
+            ch.vad_endpoint_id.store(-1, std::memory_order_release);
             ch.loopback_capture.stop();
             ch.capture_stream.close();
         }
@@ -328,6 +330,9 @@ void AudioEngine::stop() {
             bus.render_stream.close();
         }
     }
+    vad_b1_active_.store(false, std::memory_order_release);
+    vad_b2_active_.store(false, std::memory_order_release);
+    vad_client_.close();
 
     publish_telemetry_tick();
     telemetry_.close();
@@ -438,6 +443,27 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
     std::array<const float*, dsp::kDynamicMaxChannels> in_r{};
 
     for (size_t ch = 0; ch < dsp::kDynamicMaxChannels; ++ch) {
+        const int32_t vad_ep = channels_[ch].vad_endpoint_id.load(std::memory_order_acquire);
+        if (vad_ep >= 0 && vad_client_.is_open()) {
+            uint32_t got = 0u;
+            (void)vad_client_.read_render_pcm(
+                static_cast<uint32_t>(vad_ep),
+                vad_pcm_scratch_.data(),
+                static_cast<uint32_t>(frames),
+                got);
+            for (size_t i = 0; i < got; ++i) {
+                ch_in_l_[ch][i] = vad_pcm_scratch_[i * 2];
+                ch_in_r_[ch][i] = vad_pcm_scratch_[i * 2 + 1];
+            }
+            for (size_t i = got; i < frames; ++i) {
+                ch_in_l_[ch][i] = 0.0f;
+                ch_in_r_[ch][i] = 0.0f;
+            }
+            in_l[ch] = ch_in_l_[ch].data();
+            in_r[ch] = ch_in_r_[ch].data();
+            continue;
+        }
+
         if (!channels_[ch].stream_active.load(std::memory_order_acquire)) {
             continue;
         }
@@ -637,6 +663,32 @@ void AudioEngine::process_master_tick(size_t frames) noexcept {
                 xrun_count_.fetch_add(1, std::memory_order_relaxed);
                 break;
             }
+        }
+    }
+
+    // Feed native AtrisWaveVAD capture endpoints directly:
+    //   B1 (bus 2) -> Endpoint 1 ("AtrisWave Mic" for Discord/OBS)
+    //   B2 (bus 3) -> Endpoint 2 ("AtrisWave Stream Mix" for OBS)
+    if (vad_client_.is_open()) {
+        if (vad_b1_active_.load(std::memory_order_acquire)) {
+            for (size_t i = 0; i < frames; ++i) {
+                vad_pcm_scratch_[i * 2] = bus_out_l_[2][i];
+                vad_pcm_scratch_[i * 2 + 1] = bus_out_r_[2][i];
+            }
+            (void)vad_client_.write_capture_pcm(
+                static_cast<uint32_t>(AtrisWaveVadEndpointId::MicOut),
+                vad_pcm_scratch_.data(),
+                static_cast<uint32_t>(frames));
+        }
+        if (vad_b2_active_.load(std::memory_order_acquire)) {
+            for (size_t i = 0; i < frames; ++i) {
+                vad_pcm_scratch_[i * 2] = bus_out_l_[3][i];
+                vad_pcm_scratch_[i * 2 + 1] = bus_out_r_[3][i];
+            }
+            (void)vad_client_.write_capture_pcm(
+                static_cast<uint32_t>(AtrisWaveVadEndpointId::StreamMix),
+                vad_pcm_scratch_.data(),
+                static_cast<uint32_t>(frames));
         }
     }
 
@@ -945,34 +997,65 @@ V2CommandResult AudioEngine::create_channel(const std::string& name,
     if (name.empty()) {
         return {false, "invalid_name", 0};
     }
-    std::lock_guard lock(state_mutex_);
-    for (uint32_t i = 2; i < dsp::kDynamicMaxChannels; ++i) {
-        if (!channels_[i].occupied) {
-            auto& ch = channels_[i];
-            ch.occupied = true;
-            ch.stream_active.store(false, std::memory_order_release);
-            ch.pair_group.clear();
-            ch.info = DynamicChannelInfo{};
-            ch.info.channel_id = i;
-            ch.info.name = name;
-            ch.info.source_type = source_type.empty() ? "app_group" : source_type;
-            ch.info.color = color.empty() ? "#6366F1" : color;
-            ch.info.is_system = false;
-            ch.info.echo_locked_a1_a2 = (ch.info.source_type == "process_loopback");
-            ch.info.send_a1 = !ch.info.echo_locked_a1_a2;
-            ch.send_a1_rt.store(ch.info.send_a1, std::memory_order_release);
-            ch.info.send_b2 = ch.info.echo_locked_a1_a2;
+    int32_t allocated_vad_slot = -1;
+    uint32_t created_id = 0;
+    {
+        std::lock_guard lock(state_mutex_);
+        bool found = false;
+        for (uint32_t i = 2; i < dsp::kDynamicMaxChannels; ++i) {
+            if (!channels_[i].occupied) {
+                auto& ch = channels_[i];
+                ch.occupied = true;
+                ch.stream_active.store(false, std::memory_order_release);
+                ch.vad_endpoint_id.store(-1, std::memory_order_release);
+                ch.pair_group.clear();
+                ch.info = DynamicChannelInfo{};
+                ch.info.channel_id = i;
+                ch.info.name = name;
+                ch.info.source_type = source_type.empty() ? "app_group" : source_type;
+                ch.info.color = color.empty() ? "#6366F1" : color;
+                ch.info.is_system = false;
+                ch.info.echo_locked_a1_a2 = (ch.info.source_type == "process_loopback");
+                ch.info.send_a1 = !ch.info.echo_locked_a1_a2;
+                ch.send_a1_rt.store(ch.info.send_a1, std::memory_order_release);
+                ch.info.send_b2 = true;
 
-            dynamic_mixer_.set_channel_active(i, true);
-            dynamic_mixer_.set_channel_mix(i, 1.0f, false, false, 0.0f);
-            dynamic_mixer_.set_channel_send(i, 0, ch.info.send_a1, 1.0f);
-            dynamic_mixer_.set_channel_send(i, 1, false, 1.0f);
-            dynamic_mixer_.set_channel_send(i, 2, false, 1.0f);
-            dynamic_mixer_.set_channel_send(i, 3, ch.info.send_b2, 1.0f);
-            return {true, {}, i};
+                dynamic_mixer_.set_channel_active(i, true);
+                dynamic_mixer_.set_channel_mix(i, 1.0f, false, false, 0.0f);
+                dynamic_mixer_.set_channel_send(i, 0, ch.info.send_a1, 1.0f);
+                dynamic_mixer_.set_channel_send(i, 1, false, 1.0f);
+                dynamic_mixer_.set_channel_send(i, 2, false, 1.0f);
+                dynamic_mixer_.set_channel_send(i, 3, ch.info.send_b2, 1.0f);
+
+                if (vad_client_.is_open() &&
+                    (ch.info.source_type == "app_group" || ch.info.source_type == "virtual_endpoint")) {
+                    allocated_vad_slot = allocate_vad_render_slot_locked(name);
+                    if (allocated_vad_slot >= 0) {
+                        ch.vad_endpoint_id.store(allocated_vad_slot, std::memory_order_release);
+                        ch.stream_active.store(true, std::memory_order_release);
+                    }
+                }
+                created_id = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return {false, "max_channels_reached", 0};
         }
     }
-    return {false, "max_channels_reached", 0};
+
+    if (allocated_vad_slot >= 0) {
+        (void)vad_client_.set_endpoint_connected(static_cast<uint32_t>(allocated_vad_slot), true);
+        const std::string vad_dev_id = find_vad_mmdevice_id(static_cast<uint32_t>(allocated_vad_slot));
+        if (!vad_dev_id.empty()) {
+            std::lock_guard lock(state_mutex_);
+            if (channels_[created_id].occupied) {
+                channels_[created_id].info.device_id = vad_dev_id;
+            }
+        }
+    }
+    return {true, {}, created_id};
 }
 
 V2CommandResult AudioEngine::delete_channel(uint32_t channel_id) {
@@ -982,17 +1065,34 @@ V2CommandResult AudioEngine::delete_channel(uint32_t channel_id) {
     if (channel_id >= dsp::kDynamicMaxChannels) {
         return {false, "invalid_channel_id", channel_id};
     }
-    std::lock_guard lock(state_mutex_);
-    if (!channels_[channel_id].occupied) {
-        return {false, "channel_not_found", channel_id};
+    int32_t released_vad_slot = -1;
+    std::vector<std::string> apps_to_return;
+    std::string system_dev_id;
+    {
+        std::lock_guard lock(state_mutex_);
+        if (!channels_[channel_id].occupied) {
+            return {false, "channel_not_found", channel_id};
+        }
+        released_vad_slot = channels_[channel_id].vad_endpoint_id.exchange(-1, std::memory_order_acq_rel);
+        apps_to_return = channels_[channel_id].info.bound_apps;
+        system_dev_id = channels_[0].info.device_id;
+        channels_[channel_id].stream_active.store(false, std::memory_order_release);
+        channels_[channel_id].loopback_capture.stop();
+        channels_[channel_id].capture_stream.close();
+        channels_[channel_id].occupied = false;
+        channels_[channel_id].info = DynamicChannelInfo{};
+        channels_[channel_id].pair_group.clear();
+        dynamic_mixer_.set_channel_active(channel_id, false);
     }
-    channels_[channel_id].stream_active.store(false, std::memory_order_release);
-    channels_[channel_id].loopback_capture.stop();
-    channels_[channel_id].capture_stream.close();
-    channels_[channel_id].occupied = false;
-    channels_[channel_id].info = DynamicChannelInfo{};
-    channels_[channel_id].pair_group.clear();
-    dynamic_mixer_.set_channel_active(channel_id, false);
+
+    for (const auto& proc : apps_to_return) {
+        (void)routing_rules_.delete_rule(proc);
+        route_process_instances_to_device(proc, system_dev_id);
+    }
+    if (released_vad_slot >= 5 && vad_client_.is_open()) {
+        /* Keep core default slots (System=0, Game=3, Chat=4) connected; unplug dynamic slots 5..15 */
+        (void)vad_client_.set_endpoint_connected(static_cast<uint32_t>(released_vad_slot), false);
+    }
     return {true, {}, channel_id};
 }
 
@@ -1050,9 +1150,24 @@ V2CommandResult AudioEngine::bind_channel_source(uint32_t channel_id,
     wait_for_master_tick_quiesce();
     ch.loopback_capture.stop();
     ch.capture_stream.close();
+    ch.vad_endpoint_id.store(-1, std::memory_order_release);
 
-    if ((source_type == "hardware_input" || source_type == "virtual_endpoint") && !device_id.empty()) {
-        if (ch.capture_stream.open(device_id, audio::StreamDirection::Capture)) {
+    if ((source_type == "hardware_input" || source_type == "virtual_endpoint" || source_type == "app_group") &&
+        !device_id.empty()) {
+        // Detect whether device_id is a Render endpoint (open as WASAPI Loopback) or Capture endpoint
+        bool is_render_endpoint = false;
+        const auto all_devs = audio::WasapiDeviceEnumerator::enumerate_devices(false);
+        for (const auto& d : all_devs) {
+            if (d.id == device_id) {
+                is_render_endpoint = !d.is_capture;
+                break;
+            }
+        }
+        const audio::StreamDirection open_dir = is_render_endpoint
+            ? audio::StreamDirection::Loopback
+            : audio::StreamDirection::Capture;
+
+        if (ch.capture_stream.open(device_id, open_dir)) {
             const uint32_t cap_sr = ch.capture_stream.sample_rate();
             ch.pll_l.prepare(static_cast<double>(cap_sr), 48000.0);
             ch.input_ring.reset();
@@ -1289,25 +1404,34 @@ V2CommandResult AudioEngine::bind_app_to_channel(const std::string& process_name
     if (process_name.empty() || channel_id >= dsp::kDynamicMaxChannels) {
         return {false, "invalid_params", channel_id};
     }
-    std::lock_guard lock(state_mutex_);
-    if (!channels_[channel_id].occupied) {
-        return {false, "channel_not_found", channel_id};
+    std::string target_device_id;
+    {
+        std::lock_guard lock(state_mutex_);
+        if (!channels_[channel_id].occupied) {
+            return {false, "channel_not_found", channel_id};
+        }
+
+        // Remove from any other channel first (app leaves System / previous channel)
+        for (auto& ch : channels_) {
+            if (!ch.occupied) continue;
+            auto& apps = ch.info.bound_apps;
+            apps.erase(
+                std::remove_if(apps.begin(), apps.end(), [&](const std::string& a) {
+                    return _stricmp(a.c_str(), process_name.c_str()) == 0;
+                }),
+                apps.end());
+        }
+
+        channels_[channel_id].info.bound_apps.push_back(process_name);
+        target_device_id = channels_[channel_id].info.device_id;
+        (void)routing_rules_.set_rule(
+            audio::RoutingRule{process_name, channel_id, target_device_id, false});
     }
 
-    // Remove from any other channel first
-    for (auto& ch : channels_) {
-        if (!ch.occupied) continue;
-        auto& apps = ch.info.bound_apps;
-        apps.erase(
-            std::remove_if(apps.begin(), apps.end(), [&](const std::string& a) {
-                return _stricmp(a.c_str(), process_name.c_str()) == 0;
-            }),
-            apps.end());
+    // Immediately route all running instances of process_name to this channel's virtual device
+    if (!target_device_id.empty()) {
+        route_process_instances_to_device(process_name, target_device_id);
     }
-
-    channels_[channel_id].info.bound_apps.push_back(process_name);
-    (void)routing_rules_.set_rule(
-        audio::RoutingRule{process_name, channel_id, channels_[channel_id].info.device_id, false});
     return {true, {}, channel_id};
 }
 
@@ -1316,18 +1440,178 @@ V2CommandResult AudioEngine::unbind_app_from_channel(const std::string& process_
     if (process_name.empty() || channel_id >= dsp::kDynamicMaxChannels) {
         return {false, "invalid_params", channel_id};
     }
-    std::lock_guard lock(state_mutex_);
-    if (!channels_[channel_id].occupied) {
-        return {false, "channel_not_found", channel_id};
+    std::string system_dev_id;
+    {
+        std::lock_guard lock(state_mutex_);
+        if (!channels_[channel_id].occupied) {
+            return {false, "channel_not_found", channel_id};
+        }
+        auto& apps = channels_[channel_id].info.bound_apps;
+        apps.erase(
+            std::remove_if(apps.begin(), apps.end(), [&](const std::string& a) {
+                return _stricmp(a.c_str(), process_name.c_str()) == 0;
+            }),
+            apps.end());
+        system_dev_id = channels_[0].info.device_id;
+        (void)routing_rules_.delete_rule(process_name);
     }
-    auto& apps = channels_[channel_id].info.bound_apps;
-    apps.erase(
-        std::remove_if(apps.begin(), apps.end(), [&](const std::string& a) {
-            return _stricmp(a.c_str(), process_name.c_str()) == 0;
-        }),
-        apps.end());
-    (void)routing_rules_.delete_rule(process_name);
+
+    // Return running app back to AtrisWave System / Windows default
+    route_process_instances_to_device(process_name, system_dev_id);
     return {true, {}, channel_id};
+}
+
+void AudioEngine::setup_vad_bridge_if_installed() {
+    if (!vad_client_.open()) {
+        return;
+    }
+
+    const std::string sys_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::System));
+    const std::string mic_out_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::MicOut));
+    const std::string stream_mix_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::StreamMix));
+
+    std::lock_guard lock(state_mutex_);
+    // Slot 0 (System) captures directly from AtrisWaveVAD Endpoint 0 -> mixes to A1 & B2
+    channels_[0].vad_endpoint_id.store(static_cast<int32_t>(AtrisWaveVadEndpointId::System), std::memory_order_release);
+    channels_[0].stream_active.store(true, std::memory_order_release);
+    channels_[0].info.device_id = sys_id;
+    channels_[0].info.send_a1 = true;
+    channels_[0].send_a1_rt.store(true, std::memory_order_release);
+    channels_[0].info.send_b2 = true;
+    dynamic_mixer_.set_channel_send(0, 0, true, 1.0f);
+    dynamic_mixer_.set_channel_send(0, 3, true, 1.0f);
+
+    // B1 (Mic Out) -> AtrisWaveVAD Endpoint 1 ("AtrisWave Mic")
+    buses_[2].info.device_id = mic_out_id;
+    buses_[2].info.device_name = "AtrisWave Mic";
+    buses_[2].info.is_virtual = true;
+    buses_[2].info.active = true;
+    vad_b1_active_.store(true, std::memory_order_release);
+
+    // B2 (Stream Mix) -> AtrisWaveVAD Endpoint 2 ("AtrisWave Stream Mix")
+    buses_[3].info.device_id = stream_mix_id;
+    buses_[3].info.device_name = "AtrisWave Stream Mix";
+    buses_[3].info.is_virtual = true;
+    buses_[3].info.active = true;
+    vad_b2_active_.store(true, std::memory_order_release);
+}
+
+int32_t AudioEngine::allocate_vad_render_slot_locked(const std::string& channel_name) const {
+    auto is_slot_used = [&](int32_t slot) {
+        for (const auto& ch : channels_) {
+            if (ch.occupied && ch.vad_endpoint_id.load(std::memory_order_relaxed) == slot) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    std::string lower(channel_name);
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    auto try_preferred = [&](int32_t slot) -> int32_t {
+        return (!is_slot_used(slot)) ? slot : -1;
+    };
+
+    if (lower.find("game") != std::string::npos || lower.find("oyun") != std::string::npos) {
+        if (const int32_t s = try_preferred(static_cast<int32_t>(AtrisWaveVadEndpointId::Game)); s >= 0) return s;
+    }
+    if (lower.find("chat") != std::string::npos || lower.find("discord") != std::string::npos ||
+        lower.find("sohbet") != std::string::npos) {
+        if (const int32_t s = try_preferred(static_cast<int32_t>(AtrisWaveVadEndpointId::Chat)); s >= 0) return s;
+    }
+    if (lower.find("media") != std::string::npos || lower.find("medya") != std::string::npos ||
+        lower.find("music") != std::string::npos || lower.find("spotify") != std::string::npos) {
+        if (const int32_t s = try_preferred(static_cast<int32_t>(AtrisWaveVadEndpointId::Media)); s >= 0) return s;
+    }
+    if (lower.find("aux") != std::string::npos || lower.find("browser") != std::string::npos) {
+        if (const int32_t s = try_preferred(static_cast<int32_t>(AtrisWaveVadEndpointId::Aux)); s >= 0) return s;
+    }
+
+    for (int32_t slot = 3; slot < static_cast<int32_t>(ATRISWAVE_VAD_ENDPOINT_COUNT); ++slot) {
+        if (!is_slot_used(slot)) {
+            return slot;
+        }
+    }
+    return -1;
+}
+
+std::string AudioEngine::find_vad_mmdevice_id(uint32_t endpoint_id) {
+    static constexpr const char* kNames[ATRISWAVE_VAD_ENDPOINT_COUNT] = {
+        "AtrisWave System",
+        "AtrisWave Mic",
+        "AtrisWave Stream Mix",
+        "AtrisWave Game",
+        "AtrisWave Chat",
+        "AtrisWave Media",
+        "AtrisWave Aux",
+        "AtrisWave Ch 8",
+        "AtrisWave Ch 9",
+        "AtrisWave Ch 10",
+        "AtrisWave Ch 11",
+        "AtrisWave Ch 12",
+        "AtrisWave Ch 13",
+        "AtrisWave Ch 14",
+        "AtrisWave Ch 15",
+        "AtrisWave Ch 16"
+    };
+    if (endpoint_id >= ATRISWAVE_VAD_ENDPOINT_COUNT) {
+        return {};
+    }
+    const bool want_capture = (endpoint_id == 1u || endpoint_id == 2u);
+    std::string needle(kNames[endpoint_id]);
+    std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    const auto devices = audio::WasapiDeviceEnumerator::enumerate_devices(false);
+    for (const auto& d : devices) {
+        if (d.is_capture != want_capture) {
+            continue;
+        }
+        std::string lower(d.name);
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lower.find(needle) != std::string::npos) {
+            return d.id;
+        }
+    }
+    return {};
+}
+
+void AudioEngine::route_process_instances_to_device(const std::string& process_name,
+                                                    const std::string& target_device_id) {
+    if (process_name.empty()) {
+        return;
+    }
+    const auto sessions = audio::AppRouter::list_sessions();
+    for (const auto& s : sessions) {
+        if (_stricmp(s.process_name.c_str(), process_name.c_str()) == 0) {
+            (void)audio::AppRouter::route_app_to_device(s.pid, target_device_id);
+        }
+    }
+}
+
+V2CommandResult AudioEngine::set_system_default_virtual(bool enabled) {
+    if (!enabled) {
+        (void)failsafe_.restore_if_needed();
+        (void)failsafe_.disarm();
+        return {true, {}, 0};
+    }
+
+    const std::string sys_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::System));
+    if (sys_id.empty()) {
+        return {false, "atriswave_system_endpoint_not_found", 0};
+    }
+
+    (void)failsafe_.arm_current_system_defaults();
+    if (!audio::FailsafeWatchdog::set_system_default_endpoint(sys_id)) {
+        return {false, "set_default_endpoint_failed", 0};
+    }
+    return {true, {}, 0};
 }
 
 void AudioEngine::mark_state_dirty() noexcept {

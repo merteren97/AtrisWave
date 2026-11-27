@@ -368,6 +368,13 @@
                                 <controls:RotaryKnobControl Value="{Binding DuckDepthDb, Mode=TwoWay}" Minimum="-30" Maximum="0" DefaultValue="-12" Unit="dB" Label="{DynamicResource Drawer_DuckShort}" AccentColor="#EC4899" Height="78" />
                             </UniformGrid>
 
+                            <TextBlock Text="{DynamicResource Drawer_VirtualSource}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding DataContext.OutputDevices, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      SelectedValue="{Binding DeviceId, Mode=TwoWay}"
+                                      SelectedValuePath="Id"
+                                      ItemTemplate="{StaticResource DeviceComboItemTemplate}"
+                                      Margin="0,0,0,10" />
+
                             <TextBlock Text="{DynamicResource Drawer_DuckSource}" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4" />
                             <TextBox Text="{Binding DuckSourceId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
 
