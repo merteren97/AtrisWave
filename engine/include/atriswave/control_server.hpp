@@ -213,6 +213,9 @@ public:
         [[nodiscard]] virtual V2CommandResult set_system_default_virtual(bool /*enabled*/) {
             return {false, "unsupported", 0};
         }
+        [[nodiscard]] virtual V2CommandResult set_chatmix(float /*balance*/) {
+            return {false, "unsupported", 0};
+        }
 
         // v2.1 Soundboard & Spectrum Analyzer
         [[nodiscard]] virtual SoundboardPlayResult play_soundboard(const std::string& path,

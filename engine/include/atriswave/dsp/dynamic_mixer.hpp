@@ -78,6 +78,12 @@ public:
         channels_[ch].pan.store(std::clamp(pan, -1.0f, 1.0f), std::memory_order_relaxed);
     }
 
+    void set_channel_balance_gain(std::size_t ch, float gain) noexcept {
+        if (ch < kDynamicMaxChannels) {
+            channels_[ch].balance_gain.store(std::clamp(gain, 0.0f, 1.5f), std::memory_order_relaxed);
+        }
+    }
+
     void set_channel_send(std::size_t ch,
                           std::size_t bus,
                           bool enabled,
@@ -202,7 +208,9 @@ public:
             const bool sl = s.solo.load(std::memory_order_relaxed);
             const bool eff_mute = m || (any_solo && !sl);
             ch_muted[ch] = eff_mute;
-            s.gain_smoother.set_target(eff_mute ? 0.0f : s.volume.load(std::memory_order_relaxed));
+            const float eff_vol = s.volume.load(std::memory_order_relaxed) *
+                                  s.balance_gain.load(std::memory_order_relaxed);
+            s.gain_smoother.set_target(eff_mute ? 0.0f : eff_vol);
 
             const float pan = s.pan.load(std::memory_order_relaxed);
             ch_pan_l[ch] = std::min(1.0f, 1.0f - pan);
@@ -391,6 +399,7 @@ private:
     struct ChannelSlot {
         std::atomic<bool> active{false};
         std::atomic<float> volume{1.0f};
+        std::atomic<float> balance_gain{1.0f};
         std::atomic<bool> muted{false};
         std::atomic<bool> solo{false};
         std::atomic<float> pan{0.0f};

@@ -11,9 +11,12 @@ struct AudioSessionInfo {
     uint32_t pid{0};
     std::string process_name;
     std::string display_name;
+    std::string device_id;
     float volume{1.0f};
     bool muted{false};
     float peak{0.0f};
+    bool is_capture{false};
+    bool is_active{false};
 };
 
 struct RouteResult {

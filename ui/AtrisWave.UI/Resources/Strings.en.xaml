@@ -272,4 +272,21 @@
     <sys:String x:Key="Settings_StartMinimizedDesc">Keeps the main window hidden in the notification area on startup</sys:String>
     <sys:String x:Key="Settings_KeepEngineRunning">Keep Audio Engine running when closing app</sys:String>
     <sys:String x:Key="Settings_KeepEngineRunningDesc">Preserves live audio routing and mic DSP after exiting the UI</sys:String>
+
+    <sys:String x:Key="Mixer_ConsoleSubtitle">Drag active apps between virtual channels to isolate Game, Chat, Media, and Mic audio</sys:String>
+    <sys:String x:Key="Mixer_AppsToRoute">Apps to be routed</sys:String>
+    <sys:String x:Key="Mixer_Apps">Apps</sys:String>
+    <sys:String x:Key="Mixer_NoActiveApps">No active playback apps</sys:String>
+    <sys:String x:Key="Mixer_DragAppsHint">Drop active apps here</sys:String>
+    <sys:String x:Key="Mixer_NoMicApps">No apps using mic</sys:String>
+    <sys:String x:Key="Mixer_ChatMix">CHATMIX</sys:String>
+    <sys:String x:Key="Mixer_ChatMixResetTooltip">Double-click or press Reset to center Game / Chat balance</sys:String>
+    <sys:String x:Key="Mixer_Reset">Reset</sys:String>
+    <sys:String x:Key="Mixer_AddMedia">Add Media</sys:String>
+    <sys:String x:Key="Mixer_AddAux">Add Aux</sys:String>
+    <sys:String x:Key="Mixer_AddCustom">Custom</sys:String>
+    <sys:String x:Key="Mixer_StreamerShort">Streamer Mode</sys:String>
+    <sys:String x:Key="Mixer_PlaybackLabel">Playback</sys:String>
+    <sys:String x:Key="Mixer_MicInputLabel">Input Device</sys:String>
+    <sys:String x:Key="Mixer_UnbindAppTooltip">Return app to Master / System</sys:String>
 </ResourceDictionary>

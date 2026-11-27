@@ -175,9 +175,10 @@ void AudioEngine::init_default_slots() {
         channels_[i].pll_l.reset();
         channels_[i].leftover_count = 0;
         dynamic_mixer_.set_channel_active(i, false);
+        dynamic_mixer_.set_channel_balance_gain(i, 1.0f);
     }
 
-    // Slot 0: System (All Apps)
+    // Slot 0: System / Master (All Unrouted Apps)
     {
         auto& sys = channels_[0];
         sys.occupied = true;
@@ -187,20 +188,22 @@ void AudioEngine::init_default_slots() {
         sys.info.color = "#6366F1";
         sys.info.is_system = true;
         sys.info.send_a1 = true;
+        sys.info.send_b2 = true;
         sys.send_a1_rt.store(true, std::memory_order_relaxed);
         dynamic_mixer_.set_channel_active(0, true);
         dynamic_mixer_.set_channel_mix(0, 1.0f, false, false, 0.0f);
         dynamic_mixer_.set_channel_send(0, 0, true, 1.0f);
+        dynamic_mixer_.set_channel_send(0, 3, true, 1.0f);
     }
 
-    // Slot 1: Microphone (Hardware Input)
+    // Slot 1: Microphone (Hardware Input + DSP)
     {
         auto& mic = channels_[1];
         mic.occupied = true;
         mic.info.channel_id = 1;
         mic.info.name = "Microphone";
         mic.info.source_type = "hardware_input";
-        mic.info.color = "#10B981";
+        mic.info.color = "#F59E0B";
         mic.info.is_system = false;
         mic.info.send_b1 = true;
         mic.info.send_b2 = true;
@@ -208,6 +211,42 @@ void AudioEngine::init_default_slots() {
         dynamic_mixer_.set_channel_mix(1, 1.0f, false, false, 0.0f);
         dynamic_mixer_.set_channel_send(1, 2, true, 1.0f);
         dynamic_mixer_.set_channel_send(1, 3, true, 1.0f);
+    }
+
+    // Slot 2: Game (Dedicated Virtual Channel)
+    {
+        auto& game = channels_[2];
+        game.occupied = true;
+        game.info.channel_id = 2;
+        game.info.name = "Game";
+        game.info.source_type = "app_group";
+        game.info.color = "#10B981";
+        game.info.is_system = false;
+        game.info.send_a1 = true;
+        game.info.send_b2 = true;
+        game.send_a1_rt.store(true, std::memory_order_relaxed);
+        dynamic_mixer_.set_channel_active(2, true);
+        dynamic_mixer_.set_channel_mix(2, 1.0f, false, false, 0.0f);
+        dynamic_mixer_.set_channel_send(2, 0, true, 1.0f);
+        dynamic_mixer_.set_channel_send(2, 3, true, 1.0f);
+    }
+
+    // Slot 3: Chat (Dedicated Virtual Channel — Discord / Voice)
+    {
+        auto& chat = channels_[3];
+        chat.occupied = true;
+        chat.info.channel_id = 3;
+        chat.info.name = "Chat";
+        chat.info.source_type = "app_group";
+        chat.info.color = "#38BDF8";
+        chat.info.is_system = false;
+        chat.info.send_a1 = true;
+        chat.info.send_b2 = true;
+        chat.send_a1_rt.store(true, std::memory_order_relaxed);
+        dynamic_mixer_.set_channel_active(3, true);
+        dynamic_mixer_.set_channel_mix(3, 1.0f, false, false, 0.0f);
+        dynamic_mixer_.set_channel_send(3, 0, true, 1.0f);
+        dynamic_mixer_.set_channel_send(3, 3, true, 1.0f);
     }
 
     // 4 Output Buses: A1, A2, B1, B2
@@ -1422,14 +1461,19 @@ V2CommandResult AudioEngine::bind_app_to_channel(const std::string& process_name
                 apps.end());
         }
 
-        channels_[channel_id].info.bound_apps.push_back(process_name);
         target_device_id = channels_[channel_id].info.device_id;
-        (void)routing_rules_.set_rule(
-            audio::RoutingRule{process_name, channel_id, target_device_id, false});
+        if (channel_id == 0 || channels_[channel_id].info.is_system) {
+            // Returning to Master/System unroutes the app from dedicated virtual channels
+            (void)routing_rules_.delete_rule(process_name);
+        } else {
+            channels_[channel_id].info.bound_apps.push_back(process_name);
+            (void)routing_rules_.set_rule(
+                audio::RoutingRule{process_name, channel_id, target_device_id, false});
+        }
     }
 
-    // Immediately route all running instances of process_name to this channel's virtual device
-    if (!target_device_id.empty()) {
+    // Immediately route all running render instances of process_name to this channel's virtual device
+    if (!target_device_id.empty() || channel_id == 0) {
         route_process_instances_to_device(process_name, target_device_id);
     }
     return {true, {}, channel_id};
@@ -1469,6 +1513,8 @@ void AudioEngine::setup_vad_bridge_if_installed() {
     const std::string sys_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::System));
     const std::string mic_out_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::MicOut));
     const std::string stream_mix_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::StreamMix));
+    const std::string game_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::Game));
+    const std::string chat_id = find_vad_mmdevice_id(static_cast<uint32_t>(AtrisWaveVadEndpointId::Chat));
 
     std::lock_guard lock(state_mutex_);
     // Slot 0 (System) captures directly from AtrisWaveVAD Endpoint 0 -> mixes to A1 & B2
@@ -1480,6 +1526,20 @@ void AudioEngine::setup_vad_bridge_if_installed() {
     channels_[0].info.send_b2 = true;
     dynamic_mixer_.set_channel_send(0, 0, true, 1.0f);
     dynamic_mixer_.set_channel_send(0, 3, true, 1.0f);
+
+    // Slot 2 (Game) -> AtrisWaveVAD Endpoint 3 ("AtrisWave Game")
+    if (channels_[2].occupied) {
+        channels_[2].vad_endpoint_id.store(static_cast<int32_t>(AtrisWaveVadEndpointId::Game), std::memory_order_release);
+        channels_[2].stream_active.store(true, std::memory_order_release);
+        channels_[2].info.device_id = game_id;
+    }
+
+    // Slot 3 (Chat) -> AtrisWaveVAD Endpoint 4 ("AtrisWave Chat")
+    if (channels_[3].occupied) {
+        channels_[3].vad_endpoint_id.store(static_cast<int32_t>(AtrisWaveVadEndpointId::Chat), std::memory_order_release);
+        channels_[3].stream_active.store(true, std::memory_order_release);
+        channels_[3].info.device_id = chat_id;
+    }
 
     // B1 (Mic Out) -> AtrisWaveVAD Endpoint 1 ("AtrisWave Mic")
     buses_[2].info.device_id = mic_out_id;
@@ -1589,10 +1649,33 @@ void AudioEngine::route_process_instances_to_device(const std::string& process_n
     }
     const auto sessions = audio::AppRouter::list_sessions();
     for (const auto& s : sessions) {
-        if (_stricmp(s.process_name.c_str(), process_name.c_str()) == 0) {
+        if (!s.is_capture && _stricmp(s.process_name.c_str(), process_name.c_str()) == 0) {
             (void)audio::AppRouter::route_app_to_device(s.pid, target_device_id);
         }
     }
+}
+
+V2CommandResult AudioEngine::set_chatmix(float balance) {
+    const float clamped = std::clamp(balance, -1.0f, 1.0f);
+    chatmix_balance_.store(clamped, std::memory_order_release);
+
+    // -1.0 = full Game / muted Chat, 0.0 = 100%/100%, +1.0 = muted Game / full Chat
+    const float game_scale = (clamped <= 0.0f) ? 1.0f : std::max(0.0f, 1.0f - clamped);
+    const float chat_scale = (clamped >= 0.0f) ? 1.0f : std::max(0.0f, 1.0f + clamped);
+
+    std::lock_guard lock(state_mutex_);
+    for (size_t i = 0; i < dsp::kDynamicMaxChannels; ++i) {
+        if (!channels_[i].occupied) {
+            continue;
+        }
+        const auto& name = channels_[i].info.name;
+        if (i == 2 || _stricmp(name.c_str(), "Game") == 0) {
+            dynamic_mixer_.set_channel_balance_gain(i, game_scale);
+        } else if (i == 3 || _stricmp(name.c_str(), "Chat") == 0) {
+            dynamic_mixer_.set_channel_balance_gain(i, chat_scale);
+        }
+    }
+    return {true, {}, 0};
 }
 
 V2CommandResult AudioEngine::set_system_default_virtual(bool enabled) {

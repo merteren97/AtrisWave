@@ -613,7 +613,7 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         std::snprintf(
             buf,
             sizeof(buf),
-            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.1.3\"}",
+            "{\"engine_state\":%u,\"sample_rate\":%u,\"buffer_frames\":%u,\"channel_count\":%u,\"version\":\"0.1.4\"}",
             status.engine_state,
             status.sample_rate,
             status.buffer_frames,
@@ -650,12 +650,18 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
         for (size_t i = 0; i < sessions.size(); ++i) {
             if (i > 0) json.push_back(',');
             const auto& s = sessions[i];
-            char num_buf[96]{};
-            std::snprintf(num_buf, sizeof(num_buf), ",\"volume\":%.4f,\"muted\":%s,\"peak\":%.4f}",
-                          s.volume, s.muted ? "true" : "false", s.peak);
+            char num_buf[160]{};
+            std::snprintf(num_buf, sizeof(num_buf),
+                          ",\"volume\":%.4f,\"muted\":%s,\"peak\":%.4f,\"is_capture\":%s,\"is_active\":%s}",
+                          s.volume,
+                          s.muted ? "true" : "false",
+                          s.peak,
+                          s.is_capture ? "true" : "false",
+                          s.is_active ? "true" : "false");
             json += "{\"pid\":" + std::to_string(s.pid) +
                     ",\"process_name\":\"" + audio::json_escape(s.process_name) +
-                    "\",\"display_name\":\"" + audio::json_escape(s.display_name) + "\"" +
+                    "\",\"display_name\":\"" + audio::json_escape(s.display_name) +
+                    "\",\"device_id\":\"" + audio::json_escape(s.device_id) + "\"" +
                     num_buf;
         }
         json += "]}";
@@ -1049,6 +1055,17 @@ std::string ControlServer::handle_command_line(const std::string& line, bool& sh
             return make_err_response(id, res.error.empty() ? "set_system_default_virtual_failed" : res.error);
         }
         return make_ok_response(id, std::string("{\"enabled\":") + (enabled ? "true}" : "false}"));
+    }
+
+    if (*cmd == "set_chatmix") {
+        const float balance = static_cast<float>(extract_json_number(line, "balance").value_or(0.0));
+        const auto res = handler_->set_chatmix(balance);
+        if (!res.ok) {
+            return make_err_response(id, res.error.empty() ? "set_chatmix_failed" : res.error);
+        }
+        char buf[64]{};
+        std::snprintf(buf, sizeof(buf), "{\"balance\":%.4f}", balance);
+        return make_ok_response(id, buf);
     }
 
     if (*cmd == "play_soundboard") {

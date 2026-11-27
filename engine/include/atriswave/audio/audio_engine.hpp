@@ -98,6 +98,7 @@ public:
                                                           uint32_t channel_id) override;
     [[nodiscard]] V2CommandResult auto_setup_defaults() override;
     [[nodiscard]] V2CommandResult set_system_default_virtual(bool enabled) override;
+    [[nodiscard]] V2CommandResult set_chatmix(float balance) override;
 
     // v2.1 Soundboard & Spectrum Analyzer
     [[nodiscard]] SoundboardPlayResult play_soundboard(const std::string& path,
@@ -232,6 +233,7 @@ private:
     std::atomic<uint32_t> buffer_frames_{480};
     std::atomic<uint32_t> xrun_count_{0};
     std::atomic<float> cpu_load_percent_{0.0f};
+    std::atomic<float> chatmix_balance_{0.0f};
     std::atomic<uint64_t> master_tick_epoch_{0};
     std::atomic<bool> state_dirty_{false};
     std::atomic<bool> loading_state_{false};

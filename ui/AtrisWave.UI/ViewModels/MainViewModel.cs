@@ -33,13 +33,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public float[] SpectrumDb { get; } = new float[TelemetryConstants.SpectrumBins];
 
     private readonly DispatcherTimer _telemetryTimer;
+    private readonly DispatcherTimer _sessionPollTimer;
     private readonly DispatcherTimer _micDspDebounceTimer;
     private readonly DispatcherTimer _mixDebounceTimer;
     private readonly HashSet<uint> _pendingChannelMixIds = [];
     private readonly HashSet<uint> _pendingChannelFullDspIds = [];
     private readonly HashSet<string> _pendingBusMixIds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _pendingChatMix;
+    private bool _isPollingSessions;
 
     private DynamicChannelModel? _cachedPrimaryMic;
+    private DynamicChannelModel? _cachedSystemChannel;
     private bool _disposed;
     private bool _suppressSync;
     private bool _suppressSettingsSave;
@@ -58,9 +62,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<DynamicChannelModel> DynamicChannels { get; } =
     [
-        new() { ChannelId = 0, Name = "System (All Apps)", SourceType = "app_group", Color = "#38BDF8", IsSystem = true, SendA1 = true, SendB2 = true },
-        new() { ChannelId = 1, Name = "Microphone", SourceType = "hardware_input", Color = "#06B6D4", IsSystem = false, SendA1 = false, SendB1 = true, SendB2 = true },
+        new() { ChannelId = 0, Name = "System", SourceType = "app_group", Color = "#6366F1", IsSystem = true, SendA1 = true, SendB2 = true },
+        new() { ChannelId = 1, Name = "Microphone", SourceType = "hardware_input", Color = "#F59E0B", IsSystem = false, SendA1 = false, SendB1 = true, SendB2 = true },
+        new() { ChannelId = 2, Name = "Game", SourceType = "app_group", Color = "#10B981", IsSystem = false, SendA1 = true, SendB2 = true },
+        new() { ChannelId = 3, Name = "Chat", SourceType = "app_group", Color = "#38BDF8", IsSystem = false, SendA1 = true, SendB2 = true },
     ];
+
+    public ObservableCollection<DynamicChannelModel> RoutingChannels { get; } = [];
+    public ObservableCollection<AudioSessionInfo> UnroutedRenderApps { get; } = [];
+    public ObservableCollection<AudioSessionInfo> ActiveCaptureApps { get; } = [];
 
     public ObservableCollection<OutputBusModel> OutputBuses { get; } =
     [
@@ -145,7 +155,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _newChannelName = string.Empty;
     [ObservableProperty] private int _newChannelSourceIndex;
 
+    [ObservableProperty] private float _chatMixBalance;
+    [ObservableProperty] private string _chatMixDisplayText = "50 / 50";
+    [ObservableProperty] private bool _hasNoUnroutedRenderApps = true;
+    [ObservableProperty] private bool _hasNoActiveCaptureApps = true;
+    [ObservableProperty] private bool _canQuickAddMedia = true;
+    [ObservableProperty] private bool _canQuickAddAux = true;
+
     public OutputBusModel? PrimaryOutputBus => OutputBuses.Count > 0 ? OutputBuses[0] : null;
+    public DynamicChannelModel? SystemChannel => _cachedSystemChannel ??= DynamicChannels.FirstOrDefault(c => c.IsSystem || c.ChannelId == 0);
     public DynamicChannelModel? PrimaryMicChannel => _cachedPrimaryMic ??= DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
 
     public event EventHandler<bool>? GlobalHotkeysEnabledChanged;
@@ -184,6 +202,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         AttachChannelHandlers();
         AttachBusHandlers();
+        RebuildConsoleChannelCollections();
         MicDsp.PropertyChanged += OnMicDspPropertyChanged;
 
         _micDspDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
@@ -191,6 +210,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         _mixDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(35) };
         _mixDebounceTimer.Tick += OnMixDebounceTick;
+
+        _sessionPollTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(2500),
+        };
+        _sessionPollTimer.Tick += OnSessionPollTick;
+        _sessionPollTimer.Start();
 
         RefreshLocalizedStatusStrings();
         UpdateHealthCheck();
@@ -249,12 +275,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         uint[] mixIds = [.. _pendingChannelMixIds];
         uint[] fullDspIds = [.. _pendingChannelFullDspIds];
         string[] busIds = [.. _pendingBusMixIds];
+        bool sendChatMix = _pendingChatMix;
         _pendingChannelMixIds.Clear();
         _pendingChannelFullDspIds.Clear();
         _pendingBusMixIds.Clear();
+        _pendingChatMix = false;
 
         try
         {
+            if (sendChatMix)
+            {
+                await _pipeClient.SetChatMixAsync(ChatMixBalance);
+            }
+
             foreach (uint cid in mixIds)
             {
                 DynamicChannelModel? ch = DynamicChannels.FirstOrDefault(c => c.ChannelId == cid);
@@ -295,7 +328,223 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ch.PropertyChanged -= OnDynamicChannelPropertyChanged;
             ch.PropertyChanged += OnDynamicChannelPropertyChanged;
         }
+        _cachedSystemChannel = DynamicChannels.FirstOrDefault(c => c.IsSystem || c.ChannelId == 0);
         _cachedPrimaryMic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
+    }
+
+    private void RebuildConsoleChannelCollections()
+    {
+        _cachedSystemChannel = DynamicChannels.FirstOrDefault(c => c.IsSystem || c.ChannelId == 0);
+        _cachedPrimaryMic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
+
+        List<DynamicChannelModel> desired = DynamicChannels
+            .Where(c => !c.IsSystem && c.ChannelId != 0 && !c.IsHardwareInput)
+            .ToList();
+
+        for (int i = RoutingChannels.Count - 1; i >= 0; i--)
+        {
+            if (!desired.Contains(RoutingChannels[i]))
+            {
+                RoutingChannels.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < desired.Count; i++)
+        {
+            int idx = RoutingChannels.IndexOf(desired[i]);
+            if (idx < 0)
+            {
+                RoutingChannels.Insert(Math.Min(i, RoutingChannels.Count), desired[i]);
+            }
+            else if (idx != i)
+            {
+                RoutingChannels.Move(idx, i);
+            }
+        }
+
+        CanQuickAddMedia = !RoutingChannels.Any(c => string.Equals(c.IconKind, "Media", StringComparison.OrdinalIgnoreCase));
+        CanQuickAddAux = !RoutingChannels.Any(c => string.Equals(c.IconKind, "Aux", StringComparison.OrdinalIgnoreCase));
+        OnPropertyChanged(nameof(SystemChannel));
+        OnPropertyChanged(nameof(PrimaryMicChannel));
+        RebuildAppRoutingTrays();
+    }
+
+    private void RebuildAppRoutingTrays()
+    {
+        var boundApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activeRenderNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (AudioSessionInfo s in AudioSessions)
+        {
+            if (!s.IsCapture && !string.IsNullOrWhiteSpace(s.AppName))
+            {
+                activeRenderNames.Add(s.AppName);
+            }
+        }
+
+        foreach (DynamicChannelModel ch in RoutingChannels)
+        {
+            for (int i = ch.BoundAppChips.Count - 1; i >= 0; i--)
+            {
+                string existingProc = ch.BoundAppChips[i].ProcessName;
+                if (!ch.BoundApps.Any(a => string.Equals(a, existingProc, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ch.BoundAppChips.RemoveAt(i);
+                }
+            }
+
+            foreach (string proc in ch.BoundApps)
+            {
+                if (string.IsNullOrWhiteSpace(proc))
+                {
+                    continue;
+                }
+
+                boundApps.Add(proc);
+                RoutedAppChip? chip = ch.BoundAppChips.FirstOrDefault(
+                    x => string.Equals(x.ProcessName, proc, StringComparison.OrdinalIgnoreCase));
+                bool isLive = activeRenderNames.Contains(proc);
+                if (chip is null)
+                {
+                    ch.BoundAppChips.Add(new RoutedAppChip
+                    {
+                        ChannelId = ch.ChannelId,
+                        ProcessName = proc,
+                        IsLiveActive = isLive,
+                    });
+                }
+                else
+                {
+                    chip.IsLiveActive = isLive;
+                }
+            }
+
+            ch.NotifyBoundAppsChanged();
+        }
+
+        List<AudioSessionInfo> nextUnrouted = AudioSessions
+            .Where(s => !s.IsCapture && !string.IsNullOrWhiteSpace(s.AppName) && !boundApps.Contains(s.AppName))
+            .ToList();
+        ReconcileSessionCollection(UnroutedRenderApps, nextUnrouted);
+        HasNoUnroutedRenderApps = UnroutedRenderApps.Count == 0;
+
+        List<AudioSessionInfo> nextCapture = AudioSessions
+            .Where(s => s.IsCapture && !string.IsNullOrWhiteSpace(s.AppName))
+            .ToList();
+        ReconcileSessionCollection(ActiveCaptureApps, nextCapture);
+        HasNoActiveCaptureApps = ActiveCaptureApps.Count == 0;
+    }
+
+    private static void ReconcileSessionCollection(
+        ObservableCollection<AudioSessionInfo> target,
+        IReadOnlyList<AudioSessionInfo> incoming)
+    {
+        var incomingByApp = new Dictionary<string, AudioSessionInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (AudioSessionInfo s in incoming)
+        {
+            incomingByApp[s.AppName] = s;
+        }
+
+        for (int i = target.Count - 1; i >= 0; i--)
+        {
+            if (!incomingByApp.ContainsKey(target[i].AppName))
+            {
+                target.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < incoming.Count; i++)
+        {
+            AudioSessionInfo src = incoming[i];
+            int existingIdx = -1;
+            for (int j = 0; j < target.Count; j++)
+            {
+                if (string.Equals(target[j].AppName, src.AppName, StringComparison.OrdinalIgnoreCase))
+                {
+                    existingIdx = j;
+                    break;
+                }
+            }
+
+            if (existingIdx >= 0)
+            {
+                AudioSessionInfo existing = target[existingIdx];
+                existing.Pid = src.Pid;
+                existing.Peak = src.Peak;
+                existing.Volume = src.Volume;
+                existing.IsMuted = src.IsMuted;
+                existing.IsActive = src.IsActive;
+                existing.DeviceId = src.DeviceId;
+                if (existingIdx != i)
+                {
+                    target.Move(existingIdx, i);
+                }
+            }
+            else
+            {
+                target.Insert(i, src);
+            }
+        }
+    }
+
+    partial void OnChatMixBalanceChanged(float value)
+    {
+        float clamped = Math.Clamp(value, -1.0f, 1.0f);
+        if (MathF.Abs(clamped) < 0.03f)
+        {
+            ChatMixDisplayText = "50 / 50";
+        }
+        else if (clamped < 0)
+        {
+            int pct = (int)MathF.Round(MathF.Abs(clamped) * 100f);
+            ChatMixDisplayText = $"Game +{pct}%";
+        }
+        else
+        {
+            int pct = (int)MathF.Round(clamped * 100f);
+            ChatMixDisplayText = $"Chat +{pct}%";
+        }
+
+        if (!_suppressSync)
+        {
+            _pendingChatMix = true;
+            RestartMixDebounce();
+        }
+    }
+
+    [RelayCommand]
+    private void ResetChatMix() => ChatMixBalance = 0.0f;
+
+    private async void OnSessionPollTick(object? sender, EventArgs e)
+    {
+        if (_disposed || !IsEngineConnected || _isSyncingFromEngine || _isPollingSessions)
+        {
+            return;
+        }
+
+        _isPollingSessions = true;
+        try
+        {
+            PipeResult<IReadOnlyList<AudioSessionInfo>> res = await _pipeClient.ListSessionsResultAsync();
+            if (res.Ok && !_disposed)
+            {
+                AudioSessions.Clear();
+                foreach (AudioSessionInfo session in res.Data)
+                {
+                    AudioSessions.Add(session);
+                }
+                HasNoAudioSessions = AudioSessions.Count == 0;
+                RebuildAppRoutingTrays();
+            }
+        }
+        catch
+        {
+            // Non-fatal background poll
+        }
+        finally
+        {
+            _isPollingSessions = false;
+        }
     }
 
     private void AttachBusHandlers()
@@ -551,10 +800,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             OnTelemetryTick(this, EventArgs.Empty);
             _telemetryTimer.Start();
+            if (!_sessionPollTimer.IsEnabled)
+            {
+                _sessionPollTimer.Start();
+            }
         }
         else if (!active && _telemetryTimer.IsEnabled)
         {
             _telemetryTimer.Stop();
+            _sessionPollTimer.Stop();
         }
     }
 
@@ -807,11 +1061,47 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
             DynamicChannels.Add(ch);
             AttachChannelHandlers();
+            RebuildConsoleChannelCollections();
         }
 
         NewChannelName = string.Empty;
         NewChannelAppProcess = string.Empty;
         IsNewChannelCreatorOpen = false;
+    }
+
+    [RelayCommand]
+    private Task QuickAddMediaChannelAsync() => QuickCreatePresetChannelAsync("Media", "#A855F7");
+
+    [RelayCommand]
+    private Task QuickAddAuxChannelAsync() => QuickCreatePresetChannelAsync("Aux", "#EC4899");
+
+    private async Task QuickCreatePresetChannelAsync(string name, string color)
+    {
+        if (DynamicChannels.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        (bool ok, uint _) = await _pipeClient.CreateChannelAsync(name, "app_group", color);
+        if (ok)
+        {
+            await RefreshV2MixerStateAsync();
+        }
+        else
+        {
+            uint nextId = DynamicChannels.Count > 0 ? DynamicChannels.Max(c => c.ChannelId) + 1 : 4;
+            DynamicChannels.Add(new DynamicChannelModel
+            {
+                ChannelId = nextId,
+                Name = name,
+                SourceType = "app_group",
+                Color = color,
+                SendA1 = true,
+                SendB2 = true,
+            });
+            AttachChannelHandlers();
+            RebuildConsoleChannelCollections();
+        }
     }
 
     [RelayCommand]
@@ -825,6 +1115,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         await _pipeClient.DeleteChannelAsync(channel.ChannelId);
         DynamicChannels.Remove(channel);
         _cachedPrimaryMic = DynamicChannels.FirstOrDefault(c => c.IsHardwareInput);
+        RebuildConsoleChannelCollections();
+    }
+
+    [RelayCommand]
+    private async Task RemoveBoundAppChipAsync(RoutedAppChip? chip)
+    {
+        if (chip is null || string.IsNullOrWhiteSpace(chip.ProcessName))
+        {
+            return;
+        }
+
+        DynamicChannelModel? owner = DynamicChannels.FirstOrDefault(c => c.ChannelId == chip.ChannelId);
+        await _pipeClient.UnbindAppFromChannelAsync(chip.ProcessName, chip.ChannelId);
+        if (owner is not null)
+        {
+            string? existing = owner.BoundApps.FirstOrDefault(
+                a => string.Equals(a, chip.ProcessName, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                owner.BoundApps.Remove(existing);
+            }
+        }
+        RebuildAppRoutingTrays();
     }
 
     [RelayCommand]
@@ -1088,6 +1401,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         IsMicMuted = PrimaryMicChannel?.Muted ?? false;
+        RebuildConsoleChannelCollections();
         OnPropertyChanged(nameof(PrimaryOutputBus));
         OnPropertyChanged(nameof(PrimaryMicChannel));
         UpdateHealthCheck();
@@ -1196,6 +1510,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             AudioSessions.Add(session);
         }
         HasNoAudioSessions = AudioSessions.Count == 0;
+        RebuildAppRoutingTrays();
     }
 
     [RelayCommand]
@@ -1228,17 +1543,51 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public async Task BindSessionToDynamicChannelAsync(AudioSessionInfo session, DynamicChannelModel channel)
+    public Task BindSessionToDynamicChannelAsync(AudioSessionInfo session, DynamicChannelModel channel)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(channel);
 
         string procName = string.IsNullOrWhiteSpace(session.AppName) ? session.EffectiveLabel : session.AppName;
-        EnginePipeResponse resp = await _pipeClient.BindAppToChannelAsync(procName, channel.ChannelId);
-        if (resp.Ok && !channel.BoundApps.Contains(procName))
+        return DropProcessOnChannelAsync(procName, channel);
+    }
+
+    public async Task DropProcessOnChannelAsync(string processName, DynamicChannelModel targetChannel)
+    {
+        ArgumentNullException.ThrowIfNull(targetChannel);
+        if (string.IsNullOrWhiteSpace(processName))
         {
-            channel.BoundApps.Add(procName);
+            return;
         }
+
+        string proc = processName.Trim();
+
+        // Remove from every other channel in-memory immediately for instant visual feedback
+        foreach (DynamicChannelModel ch in DynamicChannels)
+        {
+            string? match = ch.BoundApps.FirstOrDefault(a => string.Equals(a, proc, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                ch.BoundApps.Remove(match);
+            }
+        }
+
+        if (targetChannel.IsSystem || targetChannel.ChannelId == 0)
+        {
+            await _pipeClient.BindAppToChannelAsync(proc, 0);
+        }
+        else if (!targetChannel.IsHardwareInput)
+        {
+            targetChannel.BoundApps.Add(proc);
+            EnginePipeResponse resp = await _pipeClient.BindAppToChannelAsync(proc, targetChannel.ChannelId);
+            if (!resp.Ok && !string.IsNullOrWhiteSpace(resp.Error))
+            {
+                SetError(resp.Error);
+            }
+        }
+
+        RebuildAppRoutingTrays();
+        await RefreshRoutingRulesAsync();
     }
 
     [RelayCommand]
@@ -1665,7 +2014,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return plus >= 0 ? info[..plus] : info;
         }
 
-        return "0.1.3";
+        return "0.1.4";
     }
 
     [RelayCommand]
@@ -1830,6 +2179,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         _telemetryTimer.Stop();
         _telemetryTimer.Tick -= OnTelemetryTick;
+        _sessionPollTimer.Stop();
+        _sessionPollTimer.Tick -= OnSessionPollTick;
         _micDspDebounceTimer.Stop();
         _micDspDebounceTimer.Tick -= OnMicDspDebounceTick;
         _mixDebounceTimer.Stop();

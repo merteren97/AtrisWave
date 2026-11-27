@@ -26,7 +26,7 @@
 
 namespace {
 
-constexpr const char* kEngineVersion = "0.1.3";
+constexpr const char* kEngineVersion = "0.1.4";
 constexpr const wchar_t* kSingleInstanceMutexName = L"Local\\AtrisWaveEngineSingleInstance";
 constexpr const wchar_t* kShutdownEventName = L"Local\\AtrisWaveEngineShutdown";
 constexpr const wchar_t* kHiddenWindowClassName = L"AtrisWaveEngineHiddenSessionWindow";

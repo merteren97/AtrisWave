@@ -272,4 +272,21 @@
     <sys:String x:Key="Settings_StartMinimizedDesc">Başlangıçta ana pencereyi bildirim alanında gizli tutar</sys:String>
     <sys:String x:Key="Settings_KeepEngineRunning">Uygulama kapatıldığında Ses Motorunu açık tut</sys:String>
     <sys:String x:Key="Settings_KeepEngineRunningDesc">Arayüzden çıkılsa bile canlı ses yönlendirme ve mikrofon DSP'sini korur</sys:String>
+
+    <sys:String x:Key="Mixer_ConsoleSubtitle">Oyun, Sohbet, Medya ve Mikrofon seslerini ayırmak için aktif uygulamaları kanallara sürükleyin</sys:String>
+    <sys:String x:Key="Mixer_AppsToRoute">Yönlendirilecek Uygulamalar</sys:String>
+    <sys:String x:Key="Mixer_Apps">Uygulamalar</sys:String>
+    <sys:String x:Key="Mixer_NoActiveApps">Aktif ses çalan uygulama yok</sys:String>
+    <sys:String x:Key="Mixer_DragAppsHint">Aktif uygulamaları buraya bırakın</sys:String>
+    <sys:String x:Key="Mixer_NoMicApps">Mikrofon kullanan uygulama yok</sys:String>
+    <sys:String x:Key="Mixer_ChatMix">CHATMIX</sys:String>
+    <sys:String x:Key="Mixer_ChatMixResetTooltip">Oyun / Sohbet dengesini sıfırlamak için çift tıklayın veya Sıfırla'ya basın</sys:String>
+    <sys:String x:Key="Mixer_Reset">Sıfırla</sys:String>
+    <sys:String x:Key="Mixer_AddMedia">Medya Ekle</sys:String>
+    <sys:String x:Key="Mixer_AddAux">Aux Ekle</sys:String>
+    <sys:String x:Key="Mixer_AddCustom">Özel Kanal</sys:String>
+    <sys:String x:Key="Mixer_StreamerShort">Yayıncı Modu</sys:String>
+    <sys:String x:Key="Mixer_PlaybackLabel">Çıkış Aygıtı</sys:String>
+    <sys:String x:Key="Mixer_MicInputLabel">Mikrofon Aygıtı</sys:String>
+    <sys:String x:Key="Mixer_UnbindAppTooltip">Uygulamayı Ana / Sistem kanalına geri döndür</sys:String>
 </ResourceDictionary>

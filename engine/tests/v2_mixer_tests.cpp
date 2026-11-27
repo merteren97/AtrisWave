@@ -165,10 +165,12 @@ void test_engine_v2_channels_feedback_and_echo_lock() {
     HANDLE evt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     ATRIS_CHECK(engine.start(evt, true), "AudioEngine headless v2 start succeeds");
 
-    // 1. Default slots: System (0) and Microphone (1)
+    // 1. Default slots: System (0), Microphone (1), Game (2), Chat (3)
     const auto initial_channels = engine.list_channels();
-    ATRIS_CHECK(initial_channels.size() == 2, "Default 2 channels (System + Microphone)");
+    ATRIS_CHECK(initial_channels.size() == 4, "Default 4 channels (System + Microphone + Game + Chat)");
     ATRIS_CHECK(!engine.delete_channel(0).ok, "Cannot delete System slot 0");
+    ATRIS_CHECK(engine.set_chatmix(-0.5f).ok, "ChatMix balance updates cleanly");
+    ATRIS_CHECK(engine.set_chatmix(0.0f).ok, "ChatMix reset to center cleanly");
 
     // 2. Create, rename, delete dynamic channel
     const auto created = engine.create_channel("Discord", "app_group", "#5865F2");

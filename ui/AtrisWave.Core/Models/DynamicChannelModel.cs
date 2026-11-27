@@ -5,7 +5,25 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace AtrisWave.Core.Models;
 
 /// <summary>
-/// Dynamic mixer channel strip model (up to 16 channels: System, Microphone, and user-created channels).
+/// Draggable app tag displayed in a channel's bottom Apps tray.
+/// </summary>
+public sealed class RoutedAppChip : ObservableObject
+{
+    private bool _isLiveActive;
+
+    public uint ChannelId { get; init; }
+    public string ProcessName { get; init; } = string.Empty;
+    public string DisplayLabel => AudioSessionInfo.FormatProcessLabel(ProcessName);
+
+    public bool IsLiveActive
+    {
+        get => _isLiveActive;
+        set => SetProperty(ref _isLiveActive, value);
+    }
+}
+
+/// <summary>
+/// Dynamic mixer channel strip model (up to 16 channels: System, Microphone, Game, Chat, and user-created channels).
 /// </summary>
 public sealed class DynamicChannelModel : ObservableObject
 {
@@ -44,7 +62,14 @@ public sealed class DynamicChannelModel : ObservableObject
     public string Name
     {
         get => _name;
-        set => SetProperty(ref _name, value);
+        set
+        {
+            if (SetProperty(ref _name, value))
+            {
+                OnPropertyChanged(nameof(IconKind));
+                OnPropertyChanged(nameof(VirtualBusLabel));
+            }
+        }
     }
 
     [JsonPropertyName("source_type")]
@@ -148,13 +173,48 @@ public sealed class DynamicChannelModel : ObservableObject
     public ObservableCollection<string> BoundApps { get; set; } = [];
 
     [JsonIgnore]
+    public ObservableCollection<RoutedAppChip> BoundAppChips { get; } = [];
+
+    [JsonIgnore]
+    public bool HasNoBoundApps => BoundAppChips.Count == 0;
+
+    public void NotifyBoundAppsChanged() => OnPropertyChanged(nameof(HasNoBoundApps));
+
+    [JsonIgnore]
+    public string IconKind
+    {
+        get
+        {
+            if (IsSystem || ChannelId == 0) return "System";
+            if (IsHardwareInput || ChannelId == 1) return "Mic";
+            if (Name.Contains("game", StringComparison.OrdinalIgnoreCase) || Name.Contains("oyun", StringComparison.OrdinalIgnoreCase)) return "Game";
+            if (Name.Contains("chat", StringComparison.OrdinalIgnoreCase) || Name.Contains("sohbet", StringComparison.OrdinalIgnoreCase) || Name.Contains("discord", StringComparison.OrdinalIgnoreCase)) return "Chat";
+            if (Name.Contains("media", StringComparison.OrdinalIgnoreCase) || Name.Contains("medya", StringComparison.OrdinalIgnoreCase) || Name.Contains("music", StringComparison.OrdinalIgnoreCase)) return "Media";
+            if (Name.Contains("aux", StringComparison.OrdinalIgnoreCase) || Name.Contains("yard", StringComparison.OrdinalIgnoreCase)) return "Aux";
+            return "Custom";
+        }
+    }
+
+    [JsonIgnore]
+    public string VirtualBusLabel => IconKind switch
+    {
+        "System" => "AtrisWave System",
+        "Game" => "AtrisWave Game",
+        "Chat" => "AtrisWave Chat",
+        "Media" => "AtrisWave Media",
+        "Aux" => "AtrisWave Aux",
+        "Mic" => "AtrisWave Mic",
+        _ => $"AtrisWave {Name}",
+    };
+
+    [JsonIgnore]
     public bool EchoLockedA1A2 => string.Equals(SourceType, "process_loopback", StringComparison.OrdinalIgnoreCase);
 
     [JsonIgnore]
     public bool IsHardwareInput => string.Equals(SourceType, "hardware_input", StringComparison.OrdinalIgnoreCase);
 
     [JsonIgnore]
-    public bool CanDelete => !IsSystem && ChannelId != 0;
+    public bool CanDelete => !IsSystem && !IsHardwareInput && ChannelId > 3;
 
     [JsonIgnore] public float PeakLeft { get => _peakLeft; set => SetProperty(ref _peakLeft, value); }
     [JsonIgnore] public float PeakRight { get => _peakRight; set => SetProperty(ref _peakRight, value); }
